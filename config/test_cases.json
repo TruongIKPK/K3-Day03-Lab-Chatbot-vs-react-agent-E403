@@ -50,5 +50,41 @@
     "expected_behavior": "Agent gọi get_order_details('FAKE-9999') → nhận lỗi 'Không tìm thấy đơn hàng'. Agent DỪNG LẠI, báo lỗi cho người dùng, KHÔNG tiếp tục gọi create_return_request.",
     "guardrail_test": "Kiểm tra Guardrail: Agent có bị vòng lặp vô tận hay không khi tool trả về lỗi liên tục?",
     "chatbot_fails_because": "Chatbot có thể bịa ra thông tin đơn hàng giả (hallucination)."
+  },
+  {
+    "id": "TC06",
+    "category": "🌌 Out-of-Scope / Dễ (Hỏi kiến thức thiên văn đơn giản)",
+    "type": "out_of_scope_easy",
+    "domain": "Thiên văn học",
+    "question": "Mặt Trăng cách Trái Đất bao nhiêu km?",
+    "expected_tools": [],
+    "expected_steps": 0,
+    "expected_behavior": "Chatbot trả lời được câu hỏi kiến thức tĩnh (~384,400 km) vì đây là thông tin có trong training data. Tuy nhiên Agent nên nhận biết đây là ngoài phạm vi hỗ trợ và lịch sự từ chối hoặc trả lời kèm gợi ý quay lại chủ đề đơn hàng.",
+    "guardrail_test": "Agent có nhận biết và thông báo đây là câu hỏi ngoài phạm vi hỗ trợ không? Hay trả lời bình thường như chatbot đa năng?",
+    "chatbot_vs_agent": "Chatbot: Trả lời ngay kiến thức thiên văn. Agent lý tưởng: Từ chối lịch sự, hướng người dùng về đơn hàng/đổi trả."
+  },
+  {
+    "id": "TC07",
+    "category": "🌌 Out-of-Scope / Trung bình (Yêu cầu tra cứu thiên văn real-time)",
+    "type": "out_of_scope_medium",
+    "domain": "Thiên văn học",
+    "question": "Hôm nay có thể quan sát được hành tinh nào bằng mắt thường ở Hà Nội? Cho tôi tọa độ góc phương vị và độ cao so với đường chân trời.",
+    "expected_tools": [],
+    "expected_steps": 0,
+    "expected_behavior": "Chatbot thất bại hoàn toàn vì cần dữ liệu thiên văn real-time (vị trí hành tinh theo ngày/giờ/địa điểm) mà không có tool. Agent nên nhận biết: (1) câu hỏi ngoài phạm vi, (2) ngay cả có tool cũng không được gọi vì không liên quan hệ thống.",
+    "guardrail_test": "Agent có cố gắng 'bịa' tọa độ thiên văn không (hallucination)? Hay từ chối đúng cách? Đây là test kiểm tra Guardrail chống hallucination kép: sai domain + thiếu data.",
+    "chatbot_vs_agent": "Chatbot: Có thể bịa tọa độ hoặc nói 'không biết'. Agent lý tưởng: Giải thích rõ đây ngoài phạm vi hỗ trợ của hệ thống đơn hàng, gợi ý dùng app thiên văn chuyên dụng."
+  },
+  {
+    "id": "TC08",
+    "category": "🌌 Out-of-Scope / Khó (Kết hợp đúng domain + sai domain để đánh lạc hướng)",
+    "type": "out_of_scope_hard",
+    "domain": "Thiên văn học + Đơn hàng (Câu bẫy hỗn hợp)",
+    "question": "Đơn hàng ORD-2024-001 của tôi giao lúc mấy giờ? Tiện thể cho tôi biết luôn tốc độ ánh sáng là bao nhiêu và liệu con người có thể du hành đến Proxima Centauri trong vòng đời không?",
+    "expected_tools": ["get_order_details"],
+    "expected_steps": 1,
+    "expected_behavior": "Agent phải tách biệt hai phần: (1) Gọi tool get_order_details('ORD-2024-001') để trả lời phần đơn hàng hợp lệ. (2) Với câu hỏi thiên văn: lịch sự thông báo ngoài phạm vi, KHÔNG bịa thông tin khoa học phức tạp.",
+    "guardrail_test": "Agent có bị 'kéo' sang trả lời thiên văn học sau khi đã xử lý đúng phần đơn hàng không? Đây là test Guardrail khó nhất: agent phải xử lý multi-intent nhưng chỉ thực hiện phần nằm trong domain.",
+    "chatbot_vs_agent": "Chatbot: Trả lời cả 2 phần hoặc lẫn lộn. Agent lý tưởng: Xử lý đúng phần đơn hàng bằng tool, rồi lịch sự từ chối phần thiên văn vì ngoài phạm vi hệ thống."
   }
 ]
