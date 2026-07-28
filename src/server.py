@@ -445,12 +445,34 @@ def api_chat():
         context_prompt = f"Lịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}" if history_text else user_query
 
         llm_out = provider.generate(context_prompt, system_prompt=REACT_SYSTEM_PROMPT)
-        trace_steps.append({
-            "thought": "Sinh phản hồi qua ReAct LLM Engine kết hợp bộ nhớ lịch sử hội thoại.",
-            "action": "generate_response_with_memory",
-            "observation": "Success"
-        })
-        final_res = llm_out
+        
+        # Tách lọc sạch Thought và Final Answer từ LLM Output
+        if "Final Answer:" in llm_out:
+            parts = llm_out.split("Final Answer:", 1)
+            thought_part = parts[0].strip()
+            clean_final_answer = parts[1].strip()
+            
+            if thought_part:
+                thought_text = thought_part.replace("Thought:", "").strip()
+                trace_steps.append({
+                    "thought": thought_text,
+                    "action": "generate_final_answer",
+                    "observation": "Extracted Final Answer"
+                })
+            else:
+                trace_steps.append({
+                    "thought": "Sinh phản hồi câu trả lời cuối cùng qua LLM Engine.",
+                    "action": "generate_response",
+                    "observation": "Success"
+                })
+            final_res = clean_final_answer
+        else:
+            trace_steps.append({
+                "thought": "Sinh phản hồi qua LLM Engine.",
+                "action": "generate_response",
+                "observation": "Success"
+            })
+            final_res = llm_out
 
     # Lưu tin nhắn vào CSDL SQLite cho bộ nhớ phiên thoại
     save_chat_message(session_id, "USER", user_query)
@@ -470,6 +492,18 @@ def api_admin_add_product():
         price=data.get("price", 0),
         stock=data.get("stock", 0),
         description=data.get("description", "")
+    )
+    return jsonify({"message": msg})
+
+
+@app.route("/api/admin/product-stock", methods=["POST"])
+def api_admin_update_product_stock():
+    """Admin cập nhật số lượng tồn kho sản phẩm"""
+    data = request.json or {}
+    msg = update_product_stock(
+        admin_id=data.get("admin_id", 3),
+        product_id=data.get("product_id"),
+        new_stock=data.get("new_stock", 0)
     )
     return jsonify({"message": msg})
 
