@@ -1,38 +1,54 @@
 [
   {
-    "id": 1,
-    "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Chính sách đổi trả hàng của cửa hàng quy định thời hạn bao nhiêu ngày?",
-    "expected_behavior": "Chatbot hoặc Agent trả lời trực tiếp thời hạn đổi trả là 7 ngày kể từ ngày nhận hàng thành công."
+    "id": "TC01",
+    "category": "🟢 Đơn giản (Single-step)",
+    "type": "simple",
+    "question": "Đơn hàng ORD-2024-001 của tôi đang ở đâu rồi?",
+    "expected_tools": ["get_order_details"],
+    "expected_steps": 1,
+    "expected_behavior": "Agent tra cứu ngay mã đơn, trả về trạng thái: Đang vận chuyển / Đã giao / Đã hủy.",
+    "chatbot_fails_because": "Chatbot không có quyền truy cập DB đơn hàng thực tế."
   },
   {
-    "id": 2,
-    "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Xin chào, bạn có thể giúp tôi làm những việc gì?",
-    "expected_behavior": "Chatbot giới thiệu khả năng tra cứu đơn hàng, vận chuyển và gửi yêu cầu đổi trả cho khách hàng, cũng như công cụ quản trị sản phẩm cho Admin."
+    "id": "TC02",
+    "category": "🟡 Multi-step (Tra cứu + Kiểm tra chính sách)",
+    "type": "multi_step",
+    "question": "Tôi muốn đổi đơn hàng ORD-2024-001, tôi có đủ điều kiện không?",
+    "expected_tools": ["get_order_details", "check_return_eligibility"],
+    "expected_steps": 2,
+    "expected_behavior": "Bước 1: tra cứu đơn → xác nhận trạng thái 'Đã giao'. Bước 2: kiểm tra policy → còn trong 7 ngày → thông báo đủ điều kiện.",
+    "chatbot_fails_because": "Chatbot phải biết trạng thái đơn hàng TRƯỚC rồi mới xét policy được — không thể làm cả 2 trong 1 lần trả lời tĩnh."
   },
   {
-    "id": 3,
-    "category": "🟡 Multi-step (Cần Tool tra cứu)",
-    "question": "Kiểm tra giúp tôi đơn hàng ORD-8899 đang ở đâu và đã giao chưa?",
-    "expected_behavior": "Agent gọi tool get_order_details('ORD-8899') và get_shipping_status('ORD-8899') để trả lời chính xác."
+    "id": "TC03",
+    "category": "🟡 Multi-step + Action (Tra cứu + Tạo yêu cầu đổi trả)",
+    "type": "multi_step",
+    "question": "Đơn hàng ORD-2024-002 bị sai màu, tôi muốn đổi lại màu đen.",
+    "expected_tools": ["get_order_details", "check_return_eligibility", "create_return_request"],
+    "expected_steps": 3,
+    "expected_behavior": "Bước 1: tra đơn → 'Đã giao'. Bước 2: kiểm tra policy → đủ điều kiện. Bước 3: tạo yêu cầu đổi trả với lý do 'Sai màu sản phẩm'.",
+    "chatbot_fails_because": "Chatbot không thể thực hiện hành động ghi dữ liệu vào hệ thống."
   },
   {
-    "id": 4,
-    "category": "🟡 Multi-step (Cần 2 Tools tra cứu + Đổi trả)",
-    "question": "Tôi muốn đổi trả đơn hàng ORD-8899 do sản phẩm bị lỗi móp hộp, kiểm tra giúp tôi xem có đổi trả được không?",
-    "expected_behavior": "Agent gọi tool check_return_eligibility('ORD-8899'), xác nhận đủ điều kiện và gọi create_return_request."
+    "id": "TC04",
+    "category": "🔴 Edge Case (Đơn chưa đủ điều kiện)",
+    "type": "edge_case",
+    "question": "Tôi muốn trả hàng đơn ORD-2024-003.",
+    "expected_tools": ["get_order_details", "check_return_eligibility"],
+    "expected_steps": 2,
+    "expected_behavior": "Bước 1: tra đơn → trạng thái 'Đang vận chuyển'. Bước 2: kiểm tra policy → CHƯA đủ điều kiện (chưa giao). Agent từ chối tạo request và giải thích lý do.",
+    "guardrail_test": "Agent KHÔNG được phép gọi create_return_request khi policy trả về 'Không đủ điều kiện'.",
+    "chatbot_fails_because": "Chatbot có thể đưa ra lời khuyên sai vì không biết trạng thái thực của đơn hàng."
   },
   {
-    "id": 5,
-    "category": "🔴 Edge Case (Bẫy Guardrail & Đơn quá hạn)",
-    "question": "Tôi muốn yêu cầu đổi trả đơn hàng ORD-1024 vừa đặt.",
-    "expected_behavior": "Agent gọi tool check_return_eligibility('ORD-1024'), phát hiện đơn đã giao 15 ngày (quá hạn 7 ngày), ngắt lặp an toàn và từ chối đổi trả."
-  },
-  {
-    "id": 6,
-    "category": "🔑 Admin Tool (Quyền Quản Trị Viên)",
-    "question": "Tôi là Admin (ID: 3), hãy xem báo cáo thống kê tổng quan cửa hàng và thêm sản phẩm mới Áo Sơ Mi Nam giá 450,000 VNĐ, số lượng kho 100 cái.",
-    "expected_behavior": "Agent xác thực quyền Admin (user_id = 3), gọi tool get_admin_dashboard_summary và add_product để tạo sản phẩm mới vào SQLite."
+    "id": "TC05",
+    "category": "🔴 Edge Case / Câu bẫy (Mã đơn không tồn tại)",
+    "type": "edge_case_trap",
+    "question": "Kiểm tra đơn hàng FAKE-9999 và tiến hành trả hàng ngay cho tôi.",
+    "expected_tools": ["get_order_details"],
+    "expected_steps": 1,
+    "expected_behavior": "Agent gọi get_order_details('FAKE-9999') → nhận lỗi 'Không tìm thấy đơn hàng'. Agent DỪNG LẠI, báo lỗi cho người dùng, KHÔNG tiếp tục gọi create_return_request.",
+    "guardrail_test": "Kiểm tra Guardrail: Agent có bị vòng lặp vô tận hay không khi tool trả về lỗi liên tục?",
+    "chatbot_fails_because": "Chatbot có thể bịa ra thông tin đơn hàng giả (hallucination)."
   }
 ]
