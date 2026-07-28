@@ -54,7 +54,7 @@ Action: tên_công_cụ[tham_số]
 
 Khi đã thu thập đủ thông tin từ Observation để kết luận hoặc trả lời người dùng, bạn PHẢI xuất kết quả theo định dạng:
 Thought: Tôi đã có đủ thông tin để kết luận.
-Final Answer: Câu trả lời hoàn chỉnh, trình bày đẹp mắt, ngắn gọn, lịch sự gửi cho người dùng.
+Final Answer: Câu trả lời hoàn chỉnh, trình bày đẹp mắt bằng Markdown chuẩn (in đậm **text**, danh sách gạch đầu dòng `- item`, xuống dòng rõ ràng), lịch sự gửi cho người dùng.
 
 ---
 
