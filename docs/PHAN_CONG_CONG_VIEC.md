@@ -34,11 +34,11 @@ Hệ thống quản lý các bảng:
 
 | Vai trò (Role) | File đảm nhận | Nhiệm vụ chính trong Đề tài Đơn Hàng & Đổi Trả | Người đảm nhận |
 | :--- | :--- | :--- | :--- |
-| **Role 1: Product Architect** | `config/test_cases.json` | Định hướng bài toán Tra cứu Đơn & Đổi trả. Soạn 5 Test Cases (Câu thường, câu tra cứu đơn, tra cứu vận chuyển, tạo đơn đổi trả, bẫy quá hạn 7 ngày). | `________________` |
-| **Role 2: Tool Engineer** | `src/tools.py` | Viết 5 Tools: `get_order_details`, `get_shipping_status`, `check_return_eligibility`, `create_return_request`, `get_user_orders`. | `________________` |
-| **Role 3: Prompt Engineer** | `src/prompts.py` | Viết `CHATBOT_BASELINE_PROMPT` và `REACT_SYSTEM_PROMPT` cài đặt phanh Guardrail 7 ngày đổi trả & `MAX_ITERATIONS = 3`. | `________________` |
-| **Role 4: Core Developer / Integrator** | `src/app.py` | **Đầu mối kéo code (`git pull`), Vibe Code kết nối Tools + Prompts + Test cases hoàn thiện App chạy demo.** | `________________` |
-| **Role 5: Observability Analyst** | `docs/trace_eval.md` | Điền Scoring Matrix & Ghi nhật ký Trace Log so sánh Chatbot Cấp 2 vs ReAct Agent Cấp 3. | `________________` |
+| **Role 1: Product Architect** | `config/test_cases.json` | Định hướng bài toán Tra cứu Đơn & Đổi trả. Soạn 5 Test Cases (Câu thường, câu tra cứu đơn, tra cứu vận chuyển, tạo đơn đổi trả, bẫy quá hạn 7 ngày). | `2A202601247 - Trần Duy Trường` |
+| **Role 2: Tool Engineer** | `src/tools.py` | Viết 5 Tools: `get_order_details`, `get_shipping_status`, `check_return_eligibility`, `create_return_request`, `get_user_orders`. | `2A202601165 - Nguyễn Quang Huy` |
+| **Role 3: Prompt Engineer** | `src/prompts.py` | Viết `CHATBOT_BASELINE_PROMPT` và `REACT_SYSTEM_PROMPT` cài đặt phanh Guardrail 7 ngày đổi trả & `MAX_ITERATIONS = 3`. | `2A202601907 - Hồ Văn Thi` |
+| **Role 4: Core Developer / Integrator** | `src/app.py` | **Đầu mối kéo code (`git pull`), Vibe Code kết nối Tools + Prompts + Test cases hoàn thiện App chạy demo.** | `2A202601541 - Lê Nguyễn Phi Trường` |
+| **Role 5: Observability Analyst** | `docs/trace_eval.md` | Điền Scoring Matrix & Ghi nhật ký Trace Log so sánh Chatbot Cấp 2 vs ReAct Agent Cấp 3. | `2A202601843 - Nguyễn Khánh Toàn` |
 
 ---
 
