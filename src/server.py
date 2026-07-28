@@ -1,6 +1,6 @@
 """
 🚀 FLASK WEB SERVER FOR E-COMMERCE AI ASSISTANT & ADMIN DASHBOARD
-Phục vụ giao diện Web App HTML/CSS/JS, Đăng nhập/Đăng ký và REST APIs kết nối CSDL SQLite.
+Phục vụ giao diện Web App HTML/CSS/JS, Đăng nhập/Đăng ký, Đặt hàng & REST APIs kết nối CSDL SQLite.
 """
 
 import os
@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from db import get_connection, init_db
 from tools import (
     AVAILABLE_TOOLS,
+    create_order,
     get_user_orders,
     get_order_details,
     get_shipping_status,
@@ -134,11 +135,36 @@ def api_get_users():
     return jsonify({"users": [dict(r) for r in rows]})
 
 
-# --- REST ENDPOINTS DỮ LIỆU ---
+# --- REST ENDPOINTS DỮ LIỆU ĐƠN HÀNG & SẢN PHẨM ---
+
+@app.route("/api/orders/create", methods=["POST"])
+def api_create_order():
+    """Khách hàng chọn sản phẩm Đặt hàng và Giả lập Thanh toán"""
+    data = request.json or {}
+    user_id = data.get("user_id", 1)
+    product_id = data.get("product_id")
+    quantity = data.get("quantity", 1)
+    payment_method = data.get("payment_method", "COD")
+    shipping_address = data.get("shipping_address", "123 Nguyễn Huệ, Quận 1, TP.HCM")
+    
+    if not product_id:
+        return jsonify({"success": False, "message": "Vui lòng chọn sản phẩm cần đặt hàng."})
+        
+    msg = create_order(
+        user_id=user_id,
+        product_id=product_id,
+        quantity=quantity,
+        payment_method=payment_method,
+        shipping_address=shipping_address
+    )
+    
+    success = "🎉 ĐẶT HÀNG THÀNH CÔNG" in msg
+    return jsonify({"success": success, "message": msg})
+
 
 @app.route("/api/orders", methods=["GET"])
 def api_get_orders():
-    """Lấy danh sách đơn hàng từ SQLite (Theo user_id hoặc tất cả nếu Admin)"""
+    """Lấy danh sách đơn hàng từ SQLite"""
     user_id = request.args.get("user_id", type=int)
     is_admin = request.args.get("is_admin", "false").lower() == "true"
     
@@ -243,7 +269,7 @@ def api_chat():
     provider = get_llm_provider()
     trace_steps = []
     
-    # 1. Trích xuất mã đơn hàng nếu có
+    # Trích xuất mã đơn hàng nếu có
     order_match = re.search(r"ORD-\d+", user_query.upper())
     code = order_match.group(0) if order_match else None
     

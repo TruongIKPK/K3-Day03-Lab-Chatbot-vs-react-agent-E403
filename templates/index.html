@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShopEase AI - Hệ Thống Đăng Nhập, Tra Cứu & Quản Trị Admin</title>
+    <title>ShopEase AI - Phân Luồng Giao Diện Khách Hàng & Admin</title>
     <!-- Google Fonts Inter & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -620,22 +620,23 @@
         .btn-action:hover { opacity: 0.9; }
 
         .btn-sm {
-            padding: 4px 10px;
-            font-size: 11px;
+            padding: 6px 12px;
+            font-size: 12px;
             border-radius: var(--radius-sm);
         }
 
-        .btn-success { background: #10b981; }
-        .btn-danger { background: #ef4444; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-cart { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; }
 
-        /* AUTH MODALS */
+        /* AUTH & CHECKOUT MODALS */
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(2, 6, 23, 0.8);
+            background: rgba(2, 6, 23, 0.85);
             backdrop-filter: blur(8px);
             display: none;
             align-items: center;
@@ -651,7 +652,7 @@
             background: #1e293b;
             border: 1px solid var(--bg-card-border);
             border-radius: var(--radius-lg);
-            width: 420px;
+            width: 440px;
             padding: 32px;
             box-shadow: var(--shadow);
             position: relative;
@@ -690,22 +691,22 @@
         </div>
 
         <nav class="nav-menu">
-            <!-- Giao diện Khách hàng -->
-            <div class="nav-header">Khách Hàng (Customer Portal)</div>
-            <div class="nav-item active" onclick="switchView('chat')">
+            <!-- GIAO DIỆN DÀNH RIÊNG CHO KHÁCH HÀNG (CUSTOMER ONLY) -->
+            <div class="nav-header customer-only" id="custHeader">Khách Hàng (Customer Portal)</div>
+            <div class="nav-item customer-only active" id="navCustChat" onclick="switchView('chat')">
                 <i class="fa-solid fa-comments"></i> Tra Cứu AI Agent
             </div>
-            <div class="nav-item" onclick="switchView('my-orders')">
+            <div class="nav-item customer-only" id="navCustOrders" onclick="switchView('my-orders')">
                 <i class="fa-solid fa-box"></i> Đơn Hàng Của Tôi
             </div>
-            <div class="nav-item" onclick="switchView('returns')">
+            <div class="nav-item customer-only" id="navCustReturns" onclick="switchView('returns')">
                 <i class="fa-solid fa-rotate-left"></i> Yêu Cầu Đổi Trả
             </div>
-            <div class="nav-item" onclick="switchView('catalog')">
+            <div class="nav-item customer-only" id="navCustCatalog" onclick="switchView('catalog')">
                 <i class="fa-solid fa-store"></i> Cửa Hàng Sản Phẩm
             </div>
 
-            <!-- Giao diện Quản trị viên (Hiện khi đăng nhập Admin) -->
+            <!-- GIAO DIỆN DÀNH RIÊNG CHO QUẢN TRỊ VIÊN (ADMIN ONLY) -->
             <div class="nav-header admin-only" id="adminHeader" style="display:none;">Quản Trị Viên (Admin Portal)</div>
             <div class="nav-item admin-only" id="navAdminDash" style="display:none;" onclick="switchView('admin-dashboard')">
                 <i class="fa-solid fa-chart-pie"></i> Báo Cáo Summary
@@ -727,7 +728,7 @@
                 <div class="name" id="userName">Nguyễn Văn A</div>
                 <div class="role-tag" id="userRoleTag">CUSTOMER</div>
             </div>
-            <button class="logout-btn" onclick="openLoginModal()" title="Đổi tài khoản">
+            <button class="logout-btn" onclick="openLoginModal()" title="Đổi tài khoản đăng nhập">
                 <i class="fa-solid fa-right-from-bracket"></i>
             </button>
         </div>
@@ -750,7 +751,7 @@
             </div>
         </header>
 
-        <!-- VIEW 1: CHAT AI AGENT & RE-ACT TRACE (USER & ADMIN) -->
+        <!-- VIEW 1: CHAT AI AGENT & RE-ACT TRACE (KHÁCH HÀNG) -->
         <div class="view-container active" id="view-chat">
             <div class="chat-layout">
                 <!-- Chat Window -->
@@ -767,7 +768,6 @@
                         <div class="prompt-pill" onclick="sendQuickPrompt('Kiểm tra đơn hàng ORD-8899 đang ở đâu và giao chưa?')">📦 Tra cứu đơn ORD-8899</div>
                         <div class="prompt-pill" onclick="sendQuickPrompt('Tôi muốn đổi trả đơn ORD-8899 do bị móp hộp sản phẩm')">🔄 Đổi trả đơn ORD-8899</div>
                         <div class="prompt-pill" onclick="sendQuickPrompt('Kiểm tra điều kiện đổi trả đơn ORD-1024')">⚠️ Kiểm tra bẫy ORD-1024 (Quá hạn)</div>
-                        <div class="prompt-pill" onclick="sendQuickPrompt('Tôi là Admin, cho tôi xem báo cáo tổng quan cửa hàng')">📊 Admin Summary Dashboard</div>
                     </div>
 
                     <div class="chat-input-area">
@@ -792,11 +792,11 @@
             </div>
         </div>
 
-        <!-- VIEW 2: GIAO DIỆN USER - ĐƠN HÀNG CỦA TÔI -->
+        <!-- VIEW 2: KHÁCH HÀNG - ĐƠN HÀNG CỦA TÔI -->
         <div class="view-container" id="view-my-orders">
             <div class="data-table-card">
                 <div class="table-header">
-                    <div class="table-title">📦 Danh Sách Đơn Hàng Cá Nhân (User Portal)</div>
+                    <div class="table-title">📦 Danh Sách Đơn Hàng Cá Nhân (Customer Portal)</div>
                     <button class="btn-action btn-sm" onclick="loadMyOrders()"><i class="fa-solid fa-sync"></i> Tải lại</button>
                 </div>
                 <table>
@@ -817,7 +817,7 @@
             </div>
         </div>
 
-        <!-- VIEW 3: GIAO DIỆN USER - ĐƠN ĐỔI TRẢ -->
+        <!-- VIEW 3: KHÁCH HÀNG - YÊU CẦU ĐỔI TRẢ -->
         <div class="view-container" id="view-returns">
             <div class="data-table-card">
                 <div class="table-header">
@@ -841,11 +841,11 @@
             </div>
         </div>
 
-        <!-- VIEW 4: CỬA HÀNG SẢN PHẨM -->
+        <!-- VIEW 4: KHÁCH HÀNG - CỬA HÀNG SẢN PHẨM & ĐẶT MUA -->
         <div class="view-container" id="view-catalog">
             <div class="data-table-card">
                 <div class="table-header">
-                    <div class="table-title">🛍️ Danh Mục Sản Phẩm & Tồn Kho (Store Catalog)</div>
+                    <div class="table-title">🛍️ Danh Mục Sản Phẩm & Đặt Mua Hàng (Store Catalog)</div>
                 </div>
                 <table>
                     <thead>
@@ -853,8 +853,9 @@
                             <th>ID</th>
                             <th>Tên Sản Phẩm</th>
                             <th>Giá Bán</th>
-                            <th>Số Lượng Kho</th>
+                            <th>Tồn Kho</th>
                             <th>Trạng Thái</th>
+                            <th>Hành Động Đặt Hàng</th>
                         </tr>
                     </thead>
                     <tbody id="catalogTableBody">
@@ -864,7 +865,7 @@
             </div>
         </div>
 
-        <!-- VIEW 5: GIAO DIỆN ADMIN - DASHBOARD SUMMARY -->
+        <!-- VIEW 5: QUẢN TRỊ VIÊN - ADMIN DASHBOARD SUMMARY -->
         <div class="view-container" id="view-admin-dashboard">
             <div class="stats-grid">
                 <div class="stat-card">
@@ -898,7 +899,7 @@
             </div>
         </div>
 
-        <!-- VIEW 6: GIAO DIỆN ADMIN - QUẢN LÝ SẢN PHẨM -->
+        <!-- VIEW 6: QUẢN TRỊ VIÊN - QUẢN LÝ SẢN PHẨM -->
         <div class="view-container" id="view-admin-products">
             <div class="data-table-card">
                 <div class="table-title" style="margin-bottom:16px;">➕ Thêm Sản Phẩm Mới Vào CSDL Kho (Admin Only)</div>
@@ -928,7 +929,7 @@
             </div>
         </div>
 
-        <!-- VIEW 7: GIAO DIỆN ADMIN - QUẢN LÝ TẤT CẢ ĐƠN HÀNG & DUYỆT ĐỔI TRẢ -->
+        <!-- VIEW 7: QUẢN TRỊ VIÊN - QUẢN LÝ TẤT CẢ ĐƠN HÀNG & DUYỆT ĐỔI TRẢ -->
         <div class="view-container" id="view-admin-orders">
             <div class="data-table-card">
                 <div class="table-header">
@@ -952,7 +953,7 @@
             </div>
         </div>
 
-        <!-- VIEW 8: GIAO DIỆN ADMIN - QUẢN LÝ NGƯỜI DÙNG -->
+        <!-- VIEW 8: QUẢN TRỊ VIÊN - QUẢN LÝ NGƯỜI DÙNG -->
         <div class="view-container" id="view-admin-users">
             <div class="data-table-card">
                 <div class="table-header">
@@ -977,6 +978,52 @@
         </div>
 
     </main>
+
+    <!-- MODAL ĐẶT HÀNG & THANH TOÁN GIẢ (CUSTOMER CHECKOUT MODAL) -->
+    <div class="modal-overlay" id="checkoutModal">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeCheckoutModal()">&times;</button>
+            <div class="modal-title">🛒 Đặt Hàng & Thanh Toán Giả</div>
+            
+            <form onsubmit="handlePlaceOrder(event)" style="display:flex; flex-direction:column; gap:14px;">
+                <input type="hidden" id="checkoutProductId">
+                <div class="form-group">
+                    <label>Sản Phẩm Đã Chọn</label>
+                    <input type="text" id="checkoutProductName" readonly style="background:rgba(255,255,255,0.05); font-weight:600;">
+                </div>
+                <div class="form-group">
+                    <label>Đơn Giá (VNĐ)</label>
+                    <input type="text" id="checkoutUnitPrice" readonly style="background:rgba(255,255,255,0.05);">
+                </div>
+                <div class="form-group">
+                    <label>Số Lượng Mua</label>
+                    <input type="number" id="checkoutQuantity" value="1" min="1" max="50" onchange="calculateOrderTotal()" required>
+                </div>
+                <div class="form-group">
+                    <label>Phương Thức Thanh Toán (Giả Lập)</label>
+                    <select id="checkoutPaymentMethod">
+                        <option value="COD">Thanh toán khi nhận hàng (COD)</option>
+                        <option value="VNPAY">Cổng thanh toán VNPAY (Demo)</option>
+                        <option value="MOMO">Ví MoMo (Demo)</option>
+                        <option value="BANK_TRANSFER">Chuyển khoản Ngân hàng (Demo)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Địa Chỉ Giao Hàng</label>
+                    <input type="text" id="checkoutAddress" value="123 Nguyễn Huệ, Quận 1, TP.HCM" required>
+                </div>
+                
+                <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:8px; padding:12px; display:flex; justify-space-between; align-items:center;">
+                    <span style="font-size:13px; color:#34d399; font-weight:600;">Tổng Tiền (Gồm Phí Ship 30k):</span>
+                    <span style="font-size:18px; font-weight:800; color:#34d399;" id="checkoutTotalText">0 VNĐ</span>
+                </div>
+
+                <button type="submit" class="btn-action btn-cart" style="margin-top:8px;">
+                    <i class="fa-solid fa-check-circle"></i> Xác Nhận Đặt Hàng & Thanh Toán Giả
+                </button>
+            </form>
+        </div>
+    </div>
 
     <!-- MODAL ĐĂNG NHẬP & ĐĂNG KÝ -->
     <div class="modal-overlay" id="authModal">
@@ -1052,6 +1099,8 @@
             role: 'CUSTOMER'
         };
 
+        let selectedProductForCheckout = null;
+
         function updateUIUser() {
             document.getElementById('userName').innerText = currentUser.full_name;
             document.getElementById('userAvatar').innerText = currentUser.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -1062,11 +1111,23 @@
             if (currentUser.role === 'ADMIN') {
                 document.getElementById('userRoleTag').style.background = 'rgba(239, 68, 68, 0.2)';
                 document.getElementById('userRoleTag').style.color = '#f87171';
-                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+                
+                document.querySelectorAll('.customer-only').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
+                document.getElementById('adminHeader').style.display = 'block';
+                document.getElementById('custHeader').style.display = 'none';
+
+                switchView('admin-dashboard');
             } else {
                 document.getElementById('userRoleTag').style.background = 'rgba(99, 102, 241, 0.2)';
                 document.getElementById('userRoleTag').style.color = '#a5b4fc';
+
+                document.querySelectorAll('.customer-only').forEach(el => el.style.display = 'flex');
                 document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                document.getElementById('adminHeader').style.display = 'none';
+                document.getElementById('custHeader').style.display = 'block';
+
+                switchView('chat');
             }
         }
 
@@ -1105,8 +1166,7 @@
                     currentUser = data.user;
                     updateUIUser();
                     closeAuthModal();
-                    alert(`✅ Xin chào ${currentUser.full_name} (${currentUser.role})!`);
-                    switchView('chat');
+                    alert(`✅ Đăng nhập thành công! Tài khoản: ${currentUser.full_name} (${currentUser.role})`);
                 } else {
                     alert(`❌ ${data.message}`);
                 }
@@ -1138,12 +1198,65 @@
                     updateUIUser();
                     closeAuthModal();
                     alert(`✅ Đăng ký thành công tài khoản ${currentUser.role}!`);
-                    switchView('chat');
                 } else {
                     alert(`❌ ${data.message}`);
                 }
             } catch (err) {
                 alert('Lỗi kết nối Server.');
+            }
+        }
+
+        /* CHECKOUT MODAL LOGIC */
+        function openCheckoutModal(productId, productName, unitPrice, stock) {
+            if (stock <= 0) {
+                alert('❌ Sản phẩm này hiện đang hết hàng trong kho!');
+                return;
+            }
+            selectedProductForCheckout = { id: productId, name: productName, price: unitPrice, stock: stock };
+            document.getElementById('checkoutProductId').value = productId;
+            document.getElementById('checkoutProductName').value = productName;
+            document.getElementById('checkoutUnitPrice').value = unitPrice.toLocaleString() + ' VNĐ';
+            document.getElementById('checkoutQuantity').value = 1;
+            calculateOrderTotal();
+            document.getElementById('checkoutModal').classList.add('active');
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkoutModal').classList.remove('active');
+        }
+
+        function calculateOrderTotal() {
+            if (!selectedProductForCheckout) return;
+            const qty = parseInt(document.getElementById('checkoutQuantity').value) || 1;
+            const total = selectedProductForCheckout.price * qty + 30000;
+            document.getElementById('checkoutTotalText').innerText = total.toLocaleString() + ' VNĐ';
+        }
+
+        async function handlePlaceOrder(e) {
+            e.preventDefault();
+            const payload = {
+                user_id: currentUser.id,
+                product_id: parseInt(document.getElementById('checkoutProductId').value),
+                quantity: parseInt(document.getElementById('checkoutQuantity').value) || 1,
+                payment_method: document.getElementById('checkoutPaymentMethod').value,
+                shipping_address: document.getElementById('checkoutAddress').value
+            };
+
+            try {
+                const res = await fetch('/api/orders/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    closeCheckoutModal();
+                    switchView('my-orders');
+                }
+            } catch (err) {
+                alert('Lỗi khi xử lý đặt hàng: ' + err.message);
             }
         }
 
@@ -1154,14 +1267,52 @@
             const targetView = document.getElementById('view-' + viewName);
             if (targetView) targetView.classList.add('active');
 
-            if (viewName === 'chat') document.getElementById('pageTitle').innerText = 'Tra Cứu AI Agent & ReAct Trace';
-            else if (viewName === 'my-orders') { document.getElementById('pageTitle').innerText = 'Đơn Hàng Của Tôi'; loadMyOrders(); }
-            else if (viewName === 'returns') { document.getElementById('pageTitle').innerText = 'Yêu Cầu Đổi Trả'; loadReturns(); }
-            else if (viewName === 'catalog') { document.getElementById('pageTitle').innerText = 'Danh Mục Sản Phẩm'; loadCatalog(); }
-            else if (viewName === 'admin-dashboard') { document.getElementById('pageTitle').innerText = 'Admin Dashboard Summary'; loadAdminStats(); }
-            else if (viewName === 'admin-products') { document.getElementById('pageTitle').innerText = 'Admin Quản Lý Sản Phẩm'; }
-            else if (viewName === 'admin-orders') { document.getElementById('pageTitle').innerText = 'Admin Duyệt Đổi Trả'; loadAdminReturns(); }
-            else if (viewName === 'admin-users') { document.getElementById('pageTitle').innerText = 'Admin Quản Lý Người Dùng'; loadAdminUsers(); }
+            if (viewName === 'chat') {
+                document.getElementById('pageTitle').innerText = 'Tra Cứu AI Agent & ReAct Trace';
+                const item = document.getElementById('navCustChat');
+                if (item) item.classList.add('active');
+            }
+            else if (viewName === 'my-orders') {
+                document.getElementById('pageTitle').innerText = 'Đơn Hàng Của Tôi';
+                const item = document.getElementById('navCustOrders');
+                if (item) item.classList.add('active');
+                loadMyOrders();
+            }
+            else if (viewName === 'returns') {
+                document.getElementById('pageTitle').innerText = 'Yêu Cầu Đổi Trả';
+                const item = document.getElementById('navCustReturns');
+                if (item) item.classList.add('active');
+                loadReturns();
+            }
+            else if (viewName === 'catalog') {
+                document.getElementById('pageTitle').innerText = 'Danh Mục Sản Phẩm & Đặt Mua';
+                const item = document.getElementById('navCustCatalog');
+                if (item) item.classList.add('active');
+                loadCatalog();
+            }
+            else if (viewName === 'admin-dashboard') {
+                document.getElementById('pageTitle').innerText = 'Admin Dashboard Summary';
+                const item = document.getElementById('navAdminDash');
+                if (item) item.classList.add('active');
+                loadAdminStats();
+            }
+            else if (viewName === 'admin-products') {
+                document.getElementById('pageTitle').innerText = 'Admin Quản Lý Sản Phẩm';
+                const item = document.getElementById('navAdminProd');
+                if (item) item.classList.add('active');
+            }
+            else if (viewName === 'admin-orders') {
+                document.getElementById('pageTitle').innerText = 'Admin Duyệt Đổi Trả';
+                const item = document.getElementById('navAdminOrders');
+                if (item) item.classList.add('active');
+                loadAdminReturns();
+            }
+            else if (viewName === 'admin-users') {
+                document.getElementById('pageTitle').innerText = 'Admin Quản Lý Người Dùng';
+                const item = document.getElementById('navAdminUsers');
+                if (item) item.classList.add('active');
+                loadAdminUsers();
+            }
         }
 
         function sendQuickPrompt(promptText) {
@@ -1273,6 +1424,10 @@
             
             if (data.products && data.products.length > 0) {
                 data.products.forEach(p => {
+                    const btnClass = p.stock > 0 ? 'btn-cart' : 'btn-danger';
+                    const btnText = p.stock > 0 ? '<i class="fa-solid fa-shopping-cart"></i> Đặt Mua' : 'Hết Hàng';
+                    const btnAction = p.stock > 0 ? `onclick="openCheckoutModal(${p.id}, '${p.name}', ${p.price}, ${p.stock})"` : 'disabled';
+
                     tbody.innerHTML += `
                         <tr>
                             <td>${p.id}</td>
@@ -1280,6 +1435,9 @@
                             <td>${p.price.toLocaleString()} VNĐ</td>
                             <td>${p.stock} cái</td>
                             <td><span class="badge ${p.stock > 0 ? 'badge-delivered' : 'badge-cancelled'}">${p.status}</span></td>
+                            <td>
+                                <button class="btn-action btn-sm ${btnClass}" ${btnAction}>${btnText}</button>
+                            </td>
                         </tr>
                     `;
                 });

@@ -6,6 +6,7 @@ Tương tác trực tiếp với Cơ sở dữ liệu SQLite (ecommerce.db) 11 b
 import os
 import sys
 import sqlite3
+import random
 from datetime import datetime
 
 # Đảm bảo import db.py hoạt động từ mọi đường dẫn
@@ -23,7 +24,70 @@ def _verify_admin(conn, admin_id: int) -> bool:
     r = cursor.fetchone()
     return r is not None and r["role"] == "ADMIN"
 
+
 # --- GROUP 1: APIS ĐƠN HÀNG & SẢN PHẨM (CUSTOMER) ---
+
+def create_order(user_id: int, product_id: int, quantity: int = 1, payment_method: str = "COD", shipping_address: str = "123 Nguyễn Huệ, Quận 1, TP.HCM") -> str:
+    """Khách hàng: Khởi tạo đơn hàng mới và giả lập thanh toán trong CSDL SQLite."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # 1. Kiểm tra sản phẩm
+        cursor.execute("SELECT id, name, price, stock, status FROM products WHERE id = ?;", (int(product_id),))
+        p = cursor.fetchone()
+        if not p:
+            conn.close()
+            return f"LỖI: Không tìm thấy sản phẩm ID #{product_id}."
+            
+        if p["stock"] < int(quantity):
+            conn.close()
+            return f"❌ ĐẶT HÀNG THẤT BẠI: Sản phẩm '{p['name']}' chỉ còn {p['stock']} cái trong kho (Yêu cầu: {quantity})."
+            
+        unit_price = p["price"]
+        total_amount = unit_price * int(quantity) + 30000  # Phí ship 30,000 VNĐ
+        order_code = f"ORD-{random.randint(1000, 9999)}"
+        
+        # 2. Thêm bản ghi đơn hàng orders
+        cursor.execute("""
+            INSERT INTO orders (user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address)
+            VALUES (?, ?, ?, 30000, 'CONFIRMED', ?, ?);
+        """, (int(user_id), order_code, total_amount, payment_method.upper(), shipping_address))
+        
+        order_id = cursor.lastrowid
+        
+        # 3. Thêm chi tiết đơn order_items
+        cursor.execute("""
+            INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+            VALUES (?, ?, ?, ?);
+        """, (order_id, int(product_id), int(quantity), unit_price))
+        
+        # 4. Trừ số lượng tồn kho product stock
+        new_stock = p["stock"] - int(quantity)
+        new_status = "ACTIVE" if new_stock > 0 else "OUT_OF_STOCK"
+        cursor.execute("UPDATE products SET stock = ?, status = ? WHERE id = ?;", (new_stock, new_status, int(product_id)))
+        
+        # 5. Tạo vận chuyển shipping
+        tracking_num = f"GHN{random.randint(100000, 999999)}"
+        cursor.execute("""
+            INSERT INTO shipping (order_id, carrier, tracking_number, status)
+            VALUES (?, 'Giao Hàng Nhanh (GHN)', ?, 'CREATED');
+        """, (order_id, tracking_num))
+        
+        conn.commit()
+        conn.close()
+        
+        return (
+            f"🎉 ĐẶT HÀNG THÀNH CÔNG!\n"
+            f"- Mã đơn hàng: {order_code}\n"
+            f"- Sản phẩm: {p['name']} (x{quantity})\n"
+            f"- Tổng tiền (đã ship): {total_amount:,.0f} VNĐ\n"
+            f"- Phương thức thanh toán: {payment_method.upper()} (Giả lập thành công)\n"
+            f"- Trạng thái: CONFIRMED (Mã vận đơn: {tracking_num})."
+        )
+    except Exception as e:
+        return f"LỖI THỰC THI ĐẶT HÀNG: {str(e)}"
+
 
 def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
     """Tra cứu danh sách đơn hàng của khách hàng theo user_id trong SQLite."""
@@ -450,9 +514,10 @@ def get_admin_dashboard_summary(admin_id: int = 3) -> str:
         return f"LỖI TRUY VẤN SQLITE (get_admin_dashboard_summary): {str(e)}"
 
 
-# Registry 15 Tools cho ReAct Agent
+# Registry 16 Tools cho ReAct Agent
 AVAILABLE_TOOLS = {
     # Customer Tools
+    "create_order": create_order,
     "get_user_orders": get_user_orders,
     "get_order_details": get_order_details,
     "cancel_order": cancel_order,
