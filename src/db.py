@@ -68,7 +68,7 @@ def init_db():
         order_code TEXT UNIQUE NOT NULL,
         total_amount REAL NOT NULL,
         shipping_fee REAL DEFAULT 0,
-        status TEXT CHECK(status IN ('PENDING', 'CONFIRMED', 'PACKING', 'SHIPPING', 'DELIVERED', 'CANCELLED')) DEFAULT 'PENDING',
+        status TEXT DEFAULT 'PENDING',
         payment_method TEXT,
         shipping_address TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -129,6 +129,7 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM orders;")
     if cursor.fetchone()[0] == 0:
         now = datetime.now()
+        two_days_ago = (now - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S")
         three_days_ago = (now - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
         fifteen_days_ago = (now - timedelta(days=15)).strftime("%Y-%m-%d %H:%M:%S")
         
@@ -149,11 +150,15 @@ def init_db():
 
         cursor.execute("INSERT OR IGNORE INTO orders (id, user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address) VALUES (2, 1, 'ORD-1024', 3500000, 0, 'DELIVERED', 'VNPAY', '456 Lê Lợi, Quận 1, TP.HCM');")
         cursor.execute("INSERT OR IGNORE INTO order_items (order_id, product_id, quantity, unit_price) VALUES (2, 102, 1, 3500000);")
-        cursor.execute("INSERT OR IGNORE INTO shipping (order_id, carrier, tracking_number, status, delivered_at) VALUES (2, 'Giao Hàng Tiết Kiệm (GHTK)', 'GHTK102499', 'DELIVERED', ?);", (fifteen_days_ago,))
+        cursor.execute("INSERT OR IGNORE INTO shipping (order_id, carrier, tracking_number, status, delivered_at) VALUES (2, 'Giao Hàng Tiết Kiệm (GHTK)', 'GHTK102499', 'DELIVERED', ?);", (two_days_ago,))
 
         cursor.execute("INSERT OR IGNORE INTO orders (id, user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address) VALUES (3, 2, 'ORD-5500', 890000, 30000, 'PENDING', 'COD', '789 Điện Biên Phủ, Bình Thạnh, TP.HCM');")
         cursor.execute("INSERT OR IGNORE INTO order_items (order_id, product_id, quantity, unit_price) VALUES (3, 103, 1, 890000);")
         cursor.execute("INSERT OR IGNORE INTO shipping (order_id, carrier, tracking_number, status) VALUES (3, 'Viettel Post', 'VT55001122', 'CREATED');")
+
+        cursor.execute("INSERT OR IGNORE INTO orders (id, user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address) VALUES (4, 1, 'ORD-9999', 890000, 30000, 'DELIVERED', 'COD', '123 Nguyễn Huệ, Quận 1, TP.HCM');")
+        cursor.execute("INSERT OR IGNORE INTO order_items (order_id, product_id, quantity, unit_price) VALUES (4, 103, 1, 890000);")
+        cursor.execute("INSERT OR IGNORE INTO shipping (order_id, carrier, tracking_number, status, delivered_at) VALUES (4, 'Giao Hàng Nhanh (GHN)', 'GHN99998877', 'DELIVERED', ?);", (fifteen_days_ago,))
 
     conn.commit()
     conn.close()
@@ -161,18 +166,21 @@ def init_db():
 # --- CHAT SESSION & MEMORY MANAGEMENT (LƯU NGỮ CẢNH HỘI THOẠI) ---
 
 def get_or_create_session(user_id: int, session_id: int = None) -> int:
-    """Tạo mới hoặc lấy session_id hội thoại đang hoạt động của user_id."""
+    """Tạo mới hoặc lấy session_id hội thoại đang hoạt động thuộc sở hữu của user_id."""
     conn = get_connection()
     cursor = conn.cursor()
     
     if session_id:
-        cursor.execute("SELECT id FROM chat_sessions WHERE id = ?;", (int(session_id),))
-        row = cursor.fetchone()
-        if row:
-            conn.close()
-            return int(session_id)
+        try:
+            cursor.execute("SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?;", (int(session_id), int(user_id)))
+            row = cursor.fetchone()
+            if row:
+                conn.close()
+                return int(session_id)
+        except Exception:
+            pass
             
-    # Lấy phiên thoại mới nhất của user_id nếu chưa truyền session_id
+    # Lấy phiên thoại mới nhất của chính user_id
     cursor.execute("SELECT id FROM chat_sessions WHERE user_id = ? ORDER BY id DESC LIMIT 1;", (int(user_id),))
     row = cursor.fetchone()
     if row:
