@@ -1320,6 +1320,8 @@
             sendMessage();
         }
 
+        let currentSessionId = null;
+
         async function sendMessage() {
             const inputEl = document.getElementById('userInput');
             const query = inputEl.value.trim();
@@ -1332,16 +1334,19 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             const traceContainer = document.getElementById('traceContainer');
-            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang suy luận và truy vấn SQLite cho ${currentUser.role}...</div></div>`;
+            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang truy xuất bộ nhớ context và suy luận cho ${currentUser.role}...</div></div>`;
 
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role })
+                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role, session_id: currentSessionId })
                 });
 
                 const data = await res.json();
+                if (data.session_id) {
+                    currentSessionId = data.session_id;
+                }
 
                 chatMessages.innerHTML += `<div class="msg-bubble assistant">${data.response}</div>`;
                 chatMessages.scrollTop = chatMessages.scrollHeight;

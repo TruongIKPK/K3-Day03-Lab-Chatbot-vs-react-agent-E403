@@ -11,7 +11,14 @@ from flask import Flask, render_template, request, jsonify
 # Thêm đường dẫn src vào sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from db import get_connection, init_db
+from db import (
+    get_connection,
+    init_db,
+    get_or_create_session,
+    save_chat_message,
+    get_chat_history,
+    extract_order_code_from_history
+)
 from tools import (
     AVAILABLE_TOOLS,
     create_order,
@@ -294,14 +301,18 @@ def api_user_profile():
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    """Xử lý tin nhắn từ FE với ReAct Agent Loop & Trích xuất Trace Log"""
+    """Xử lý tin nhắn từ FE với ReAct Agent Loop, Bộ Nhớ Context Session & Trích xuất Trace Log"""
     data = request.json or {}
     user_query = data.get("query", "")
     user_id = data.get("user_id", 1)
     user_role = data.get("role", "CUSTOMER")
+    input_session_id = data.get("session_id")
     
     if not user_query:
-        return jsonify({"response": "Vui lòng nhập câu hỏi.", "trace": []})
+        return jsonify({"response": "Vui lòng nhập câu hỏi.", "trace": [], "session_id": input_session_id})
+
+    # Lấy hoặc tạo phiên thoại hội thoại
+    session_id = get_or_create_session(user_id, input_session_id)
 
     provider = get_llm_provider()
     trace_steps = []
@@ -314,18 +325,30 @@ def api_chat():
             "action": "scope_guardrail_block",
             "observation": "Blocked by Scope Policy"
         })
-        return jsonify({"response": guard["reason"], "trace": trace_steps})
+        save_chat_message(session_id, "USER", user_query)
+        save_chat_message(session_id, "ASSISTANT", guard["reason"])
+        return jsonify({"response": guard["reason"], "trace": trace_steps, "session_id": session_id})
 
-    # Trích xuất mã đơn hàng nếu có
+    # Trích xuất mã đơn hàng từ câu hỏi hiện tại HOẶC truy tìm từ bộ nhớ hội thoại trước đó
     order_match = re.search(r"ORD-\d+", user_query.upper())
     code = order_match.group(0) if order_match else None
+    
+    if not code:
+        code_from_memory = extract_order_code_from_history(session_id)
+        if code_from_memory:
+            code = code_from_memory
+            trace_steps.append({
+                "thought": f"🧠 Tái tạo ngữ cảnh bộ nhớ (Session #{session_id}): Nhớ mã đơn hàng {code} từ tin nhắn trước.",
+                "action": f"memory_recall['{code}']",
+                "observation": f"Recalled {code} from context"
+            })
     
     query_lower = user_query.lower()
     
     if ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower) and code:
         res = cancel_order(code, "Yêu cầu từ AI Chatbot")
         trace_steps.append({
-            "thought": f"Khách hàng muốn hủy đơn hàng {code}. Kích hoạt tool cancel_order.",
+            "thought": f"Khách hàng muốn hủy đơn hàng {code} (Từ ngữ cảnh hội thoại). Kích hoạt tool cancel_order.",
             "action": f"cancel_order['{code}', 'Yêu cầu từ AI Chatbot']",
             "observation": res
         })
@@ -334,7 +357,7 @@ def api_chat():
     elif "đổi trả" in query_lower and code:
         eligibility = check_return_eligibility(code)
         trace_steps.append({
-            "thought": f"Khách hàng hỏi đổi trả đơn {code}. Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
+            "thought": f"Khách hàng hỏi đổi trả đơn {code} (Từ ngữ cảnh hội thoại). Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
             "action": f"check_return_eligibility['{code}']",
             "observation": eligibility
         })
@@ -382,15 +405,24 @@ def api_chat():
             })
             final_res = "🚫 TỪ CHỐI TRUY CẬP: Tài khoản của bạn không có quyền xem thông tin Admin."
     else:
-        llm_out = provider.generate(user_query, system_prompt=REACT_SYSTEM_PROMPT)
+        # Lấy lịch sử hội thoại 6 tin gần đây để làm Context cho LLM
+        history_msgs = get_chat_history(session_id, limit=6)
+        history_text = "\n".join([f"{m['role']}: {m['message']}" for m in history_msgs])
+        context_prompt = f"Lịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}" if history_text else user_query
+
+        llm_out = provider.generate(context_prompt, system_prompt=REACT_SYSTEM_PROMPT)
         trace_steps.append({
-            "thought": "Sinh phản hồi qua ReAct LLM Engine.",
-            "action": "generate_response",
+            "thought": "Sinh phản hồi qua ReAct LLM Engine kết hợp bộ nhớ lịch sử hội thoại.",
+            "action": "generate_response_with_memory",
             "observation": "Success"
         })
         final_res = llm_out
 
-    return jsonify({"response": final_res, "trace": trace_steps})
+    # Lưu tin nhắn vào CSDL SQLite cho bộ nhớ phiên thoại
+    save_chat_message(session_id, "USER", user_query)
+    save_chat_message(session_id, "ASSISTANT", final_res)
+
+    return jsonify({"response": final_res, "trace": trace_steps, "session_id": session_id})
 
 
 @app.route("/api/admin/product", methods=["POST"])
