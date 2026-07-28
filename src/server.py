@@ -25,6 +25,7 @@ from tools import (
     get_user_orders,
     get_order_details,
     cancel_order,
+    search_products,
     get_shipping_status,
     check_return_eligibility,
     create_return_request,
@@ -388,6 +389,39 @@ def api_chat():
         })
         final_res = f"📦 Thông tin đơn hàng <strong>{code}</strong>:<br><pre style='font-family:sans-serif;'>{details}\n\n{shipping}</pre>"
         
+    elif any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "bao nhiêu đơn", "xem đơn hàng", "đơn hàng hiện có", "tất cả đơn hàng", "my orders", "lịch sử đơn hàng", "lịch sử mua hàng", "đã đặt bao nhiêu", "tôi đã mua"]):
+        orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
+        trace_steps.append({
+            "thought": f"Khách hàng yêu cầu xem danh sách tất cả đơn hàng. Gọi tool get_user_orders[{user_id}].",
+            "action": f"get_user_orders[{user_id}, 'ALL']",
+            "observation": orders_result
+        })
+        # Đếm số đơn hàng
+        order_lines = [line for line in orders_result.split("\n") if line.strip().startswith("- ORD-")]
+        count = len(order_lines)
+        if count > 0:
+            final_res = (
+                f"📋 <strong>Danh sách đơn hàng của bạn ({count} đơn):</strong><br>"
+                f"<pre style='font-family:sans-serif;'>{orders_result}</pre>"
+            )
+        else:
+            final_res = "📭 Bạn hiện chưa có đơn hàng nào trong hệ thống. Hãy khám phá sản phẩm và đặt hàng ngay nhé!"
+
+    elif any(kw in query_lower for kw in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]):
+        # Trích xuất keyword tìm kiếm từ câu hỏi
+        search_keyword = query_lower
+        for prefix in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]:
+            search_keyword = search_keyword.replace(prefix, "").strip()
+        if not search_keyword or len(search_keyword) < 2:
+            search_keyword = "%"  # Tìm tất cả nếu không có keyword cụ thể
+        products_result = search_products(search_keyword)
+        trace_steps.append({
+            "thought": f"Khách hàng tìm kiếm sản phẩm với từ khóa '{search_keyword}'. Gọi tool search_products.",
+            "action": f"search_products['{search_keyword}']",
+            "observation": products_result
+        })
+        final_res = f"🛒 <strong>Kết quả tìm kiếm:</strong><br><pre style='font-family:sans-serif;'>{products_result}</pre>"
+
     elif "admin" in query_lower or "thống kê" in query_lower or "doanh thu" in query_lower:
         if user_role == "ADMIN":
             summary = get_admin_dashboard_summary(user_id)
