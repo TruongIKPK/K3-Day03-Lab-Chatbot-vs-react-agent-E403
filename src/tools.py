@@ -29,11 +29,61 @@ def _verify_admin(conn, admin_id: int) -> bool:
 
 def create_order(user_id: int, product_id: int, quantity: int = 1, payment_method: str = "COD", shipping_address: str = "123 Nguyễn Huệ, Quận 1, TP.HCM") -> str:
     """Khách hàng: Khởi tạo đơn hàng mới và giả lập thanh toán trong CSDL SQLite."""
+    """
+Create a new order and simulate payment in the SQLite database.
+
+Business Flow:
+    - Validate product exists.
+    - Validate inventory.
+    - Create order.
+    - Create order items.
+    - Update product stock.
+    - Create shipping record.
+
+Args:
+    user_id (int):
+        Customer ID.
+
+    product_id (int):
+        Product ID.
+
+    quantity (int, optional):
+        Quantity to purchase.
+        Default = 1.
+
+    payment_method (str, optional):
+        Payment method.
+        Example:
+            "COD"
+            "BANK"
+
+    shipping_address (str, optional):
+        Delivery address.
+
+Returns:
+    str:
+        Success:
+            Human-readable order confirmation.
+
+        Failure:
+            Product not found.
+            Out of stock.
+            SQLite execution error.
+
+Database:
+    - products
+    - orders
+    - order_items
+    - shipping
+
+Error Contract:
+    Never raises exceptions.
+    Always returns a readable string.
+"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # 1. Kiểm tra sản phẩm
         cursor.execute("SELECT id, name, price, stock, status FROM products WHERE id = ?;", (int(product_id),))
         p = cursor.fetchone()
         if not p:
@@ -48,7 +98,6 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
         total_amount = unit_price * int(quantity) + 30000  # Phí ship 30,000 VNĐ
         order_code = f"ORD-{random.randint(1000, 9999)}"
         
-        # 2. Thêm bản ghi đơn hàng orders
         cursor.execute("""
             INSERT INTO orders (user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address)
             VALUES (?, ?, ?, 30000, 'CONFIRMED', ?, ?);
@@ -56,18 +105,15 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
         
         order_id = cursor.lastrowid
         
-        # 3. Thêm chi tiết đơn order_items
         cursor.execute("""
             INSERT INTO order_items (order_id, product_id, quantity, unit_price)
             VALUES (?, ?, ?, ?);
         """, (order_id, int(product_id), int(quantity), unit_price))
         
-        # 4. Trừ số lượng tồn kho product stock
         new_stock = p["stock"] - int(quantity)
         new_status = "ACTIVE" if new_stock > 0 else "OUT_OF_STOCK"
         cursor.execute("UPDATE products SET stock = ?, status = ? WHERE id = ?;", (new_stock, new_status, int(product_id)))
         
-        # 5. Tạo vận chuyển shipping
         tracking_num = f"GHN{random.randint(100000, 999999)}"
         cursor.execute("""
             INSERT INTO shipping (order_id, carrier, tracking_number, status)
@@ -91,6 +137,29 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
 
 def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
     """Tra cứu danh sách đơn hàng của khách hàng theo user_id trong SQLite."""
+    """
+Retrieve all orders of a customer.
+
+Args:
+    user_id (int):
+        Customer ID.
+
+    status_filter (str, optional):
+        Filter by order status.
+        Default = "ALL".
+
+Returns:
+    str:
+        List of matching orders or readable error.
+
+Database:
+    - orders
+    - order_items
+    - products
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -123,42 +192,114 @@ def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
 
 
 def get_order_details(order_code: str) -> str:
-    """Tra cứu chi tiết một đơn hàng trong CSDL SQLite."""
+    """
+    Retrieve detailed information of an order from the SQLite database.
+
+    Args:
+        order_code (str):
+            Unique order code.
+            Example: "ORD-2024-001"
+
+    Returns:
+        str:
+            Success:
+                Human-readable order information.
+
+            Failure:
+                "LỖI: Mã đơn hàng không được để trống."
+                "LỖI: Không tìm thấy đơn hàng ..."
+                "LỖI TRUY VẤN SQLITE: ..."
+
+    Database:
+        - orders
+        - order_items
+        - products
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
+
+    if not order_code or not order_code.strip():
+        return "LỖI: Mã đơn hàng không được để trống."
+
     code = order_code.strip().upper()
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT o.order_code, o.user_id, o.status, o.total_amount, o.payment_method, o.shipping_address, o.created_at,
-                   GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')', ', ') AS items
+            SELECT
+                o.order_code,
+                o.user_id,
+                o.status,
+                o.total_amount,
+                o.payment_method,
+                o.shipping_address,
+                o.created_at,
+                GROUP_CONCAT(
+                    p.name || ' (x' || oi.quantity || ')',
+                    ', '
+                ) AS items
             FROM orders o
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
+            JOIN order_items oi
+                ON o.id = oi.order_id
+            JOIN products p
+                ON oi.product_id = p.id
             WHERE o.order_code = ?
             GROUP BY o.id;
         """, (code,))
-        
-        r = cursor.fetchone()
-        conn.close()
-        
-        if r:
-            return (
-                f"Thông tin đơn hàng {r['order_code']}:\n"
-                f"- Khách hàng ID: {r['user_id']}\n"
-                f"- Sản phẩm: {r['items']}\n"
-                f"- Tổng tiền: {r['total_amount']:,} VNĐ (Thanh toán: {r['payment_method']})\n"
-                f"- Địa chỉ giao: {r['shipping_address']}\n"
-                f"- Trạng thái đơn: {r['status']}\n"
-                f"- Ngày tạo đơn: {r['created_at']}"
-            )
-        return f"LỖI: Không tìm thấy mã đơn hàng '{order_code}' trong CSDL SQLite."
-    except Exception as e:
-        return f"LỖI TRUY VẤN SQLITE (get_order_details): {str(e)}"
 
+        order = cursor.fetchone()
+        conn.close()
+
+        if order is None:
+            return f"LỖI: Không tìm thấy đơn hàng '{code}'."
+
+        return (
+            f"📦 ĐƠN HÀNG {order['order_code']}\n"
+            f"- User ID: {order['user_id']}\n"
+            f"- Trạng thái: {order['status']}\n"
+            f"- Sản phẩm: {order['items']}\n"
+            f"- Tổng tiền: {order['total_amount']:,.0f} VNĐ\n"
+            f"- Thanh toán: {order['payment_method']}\n"
+            f"- Địa chỉ: {order['shipping_address']}\n"
+            f"- Ngày tạo: {order['created_at']}"
+        )
+
+    except sqlite3.Error as e:
+        return f"LỖI TRUY VẤN SQLITE: {e}"
+
+    except Exception as e:
+        return f"LỖI: {e}"
 
 def cancel_order(order_code: str, reason: str = "Đổi ý không mua nữa") -> str:
     """Hủy đơn hàng nếu đơn ở trạng thái PENDING hoặc CONFIRMED."""
+    """
+Cancel an order if it is still cancellable.
+
+Business Rules:
+    - Order must exist.
+    - Only PENDING or CONFIRMED orders can be cancelled.
+
+Args:
+    order_code (str):
+        Order code.
+
+    reason (str, optional):
+        Cancellation reason.
+
+Returns:
+    str:
+        Cancellation result.
+
+Database:
+    - orders
+
+Error Contract:
+    Never raises exceptions.
+"""
     code = order_code.strip().upper()
     try:
         conn = get_connection()
@@ -186,6 +327,23 @@ def cancel_order(order_code: str, reason: str = "Đổi ý không mua nữa") ->
 
 def search_products(keyword: str) -> str:
     """Tra cứu thông tin sản phẩm trong CSDL SQLite."""
+    """
+Search products by keyword.
+
+Args:
+    keyword (str):
+        Product name keyword.
+
+Returns:
+    str:
+        Matching products or readable error.
+
+Database:
+    - products
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -205,73 +363,194 @@ def search_products(keyword: str) -> str:
 # --- GROUP 2: APIS VẬN CHUYỂN ---
 
 def get_shipping_status(order_code: str) -> str:
-    """Tra cứu thông tin vận chuyển của đơn hàng từ bảng shipping."""
+    """
+    Retrieve shipping information of an order.
+
+    Args:
+        order_code (str):
+            Order code.
+
+    Returns:
+        str:
+            Shipping information or readable error.
+
+    Database:
+        - orders
+        - shipping
+
+    Error Contract:
+        Never raises exceptions.
+    """
+
+    if not order_code or not order_code.strip():
+        return "LỖI: Mã đơn hàng không được để trống."
+
     code = order_code.strip().upper()
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT s.carrier, s.tracking_number, s.status, s.delivered_at
+            SELECT
+                s.carrier,
+                s.tracking_number,
+                s.status,
+                s.delivered_at
             FROM shipping s
-            JOIN orders o ON s.order_id = o.id
+            JOIN orders o
+                ON s.order_id = o.id
             WHERE o.order_code = ?;
         """, (code,))
-        
-        ship = cursor.fetchone()
+
+        shipping = cursor.fetchone()
         conn.close()
-        
-        if ship:
-            deliv = ship['delivered_at'] if ship['delivered_at'] else "Chưa giao hàng thành công"
-            return (
-                f"Thông tin vận chuyển đơn {code}:\n"
-                f"- Đơn vị vận chuyển: {ship['carrier']}\n"
-                f"- Mã vận đơn: {ship['tracking_number']}\n"
-                f"- Trạng thái vận chuyển: {ship['status']}\n"
-                f"- Ngày giao thực tế: {deliv}"
-            )
-        return f"LỖI: Không tìm thấy vận chuyển cho đơn hàng '{order_code}'."
+
+        if shipping is None:
+            return f"LỖI: Không tìm thấy thông tin vận chuyển của '{code}'."
+
+        delivered = (
+            shipping["delivered_at"]
+            if shipping["delivered_at"]
+            else "Chưa giao"
+        )
+
+        return (
+            f"🚚 VẬN CHUYỂN {code}\n"
+            f"- Đơn vị: {shipping['carrier']}\n"
+            f"- Tracking: {shipping['tracking_number']}\n"
+            f"- Trạng thái: {shipping['status']}\n"
+            f"- Giao lúc: {delivered}"
+        )
+
+    except sqlite3.Error as e:
+        return f"LỖI TRUY VẤN SQLITE: {e}"
+
     except Exception as e:
-        return f"LỖI TRUY VẤN SQLITE (get_shipping_status): {str(e)}"
-
-
+        return f"LỖI: {e}"
 # --- GROUP 3: APIS ĐỔI TRẢ HÀNG (CUSTOMER) ---
 
 def check_return_eligibility(order_code: str) -> str:
-    """Kiểm tra điều kiện đổi trả của đơn hàng trong SQLite (Hạn 7 ngày kể từ ngày giao)."""
+    """
+    Check whether an order satisfies the 7-day return policy.
+
+    Business Rules:
+        - Order must exist.
+        - Order status = DELIVERED.
+        - Shipping status = DELIVERED.
+        - Delivered within 7 days.
+
+    Args:
+        order_code (str)
+
+    Returns:
+        str:
+            Eligibility result.
+
+    Database:
+        - orders
+        - shipping
+
+    Error Contract:
+        Never raises exceptions.
+    """
+
+    if not order_code or not order_code.strip():
+        return "LỖI: Mã đơn hàng không được để trống."
+
     code = order_code.strip().upper()
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT o.status AS order_status, s.status AS shipping_status, s.delivered_at,
-                   CAST((julianday('now') - julianday(s.delivered_at)) AS INTEGER) AS days_since_delivery
+            SELECT
+                o.status AS order_status,
+                s.status AS shipping_status,
+                s.delivered_at,
+                CAST(
+                    julianday('now') - julianday(s.delivered_at)
+                    AS INTEGER
+                ) AS days_since_delivery
             FROM orders o
-            LEFT JOIN shipping s ON o.id = s.order_id
+            LEFT JOIN shipping s
+                ON o.id = s.order_id
             WHERE o.order_code = ?;
         """, (code,))
-        
-        r = cursor.fetchone()
+
+        row = cursor.fetchone()
         conn.close()
-        
-        if not r:
-            return f"LỖI: Không tìm thấy đơn hàng '{order_code}' trong CSDL SQLite."
-            
-        if r["order_status"] != "DELIVERED" or r["shipping_status"] != "DELIVERED" or not r["delivered_at"]:
-            return f"KHÔNG HỢP LỆ ĐỔI TRẢ: Đơn hàng '{code}' chưa ở trạng thái giao thành công (Hiện tại: {r['order_status']})."
-            
-        days = r["days_since_delivery"]
-        if days is not None and days <= 7:
-            return f"HỢP LỆ ĐỔI TRẢ: Đơn hàng '{code}' đã giao {days} ngày trước (Trong hạn bảo hành 7 ngày)."
-        else:
-            return f"KHÔNG HỢP LỆ ĐỔI TRẢ: Đơn hàng '{code}' đã giao được {days} ngày (Quá hạn quy định 7 ngày)."
+
+        if row is None:
+            return f"LỖI: Không tìm thấy đơn hàng '{code}'."
+
+        if row["order_status"] != "DELIVERED":
+            return (
+                "KHÔNG HỢP LỆ ĐỔI TRẢ: "
+                f"Đơn đang ở trạng thái {row['order_status']}."
+            )
+
+        if row["shipping_status"] != "DELIVERED":
+            return (
+                "KHÔNG HỢP LỆ ĐỔI TRẢ: "
+                "Đơn chưa giao thành công."
+            )
+
+        days = row["days_since_delivery"]
+
+        if days is None:
+            return "LỖI: Không xác định được ngày giao hàng."
+
+        if days <= 7:
+            return (
+                f"✅ HỢP LỆ ĐỔI TRẢ\n"
+                f"- Đã giao {days} ngày\n"
+                f"- Chính sách: Trong 7 ngày"
+            )
+
+        return (
+            f"❌ KHÔNG HỢP LỆ ĐỔI TRẢ\n"
+            f"- Đã giao {days} ngày\n"
+            f"- Vượt quá chính sách 7 ngày"
+        )
+
+    except sqlite3.Error as e:
+        return f"LỖI TRUY VẤN SQLITE: {e}"
+
     except Exception as e:
-        return f"LỖI TRUY VẤN SQLITE (check_return_eligibility): {str(e)}"
-
-
+        return f"LỖI: {e}"
+    
 def create_return_request(order_code: str, reason: str = "DEFECTIVE", description: str = "Khách hàng đổi trả") -> str:
     """Khởi tạo đơn đổi trả trong bảng return_requests SQLite."""
+    """
+Create a return request for an eligible order.
+
+Business Rules:
+    - Order must satisfy return policy.
+    - Create a new return request.
+
+Args:
+    order_code (str):
+        Order code.
+
+    reason (str, optional):
+        Return reason.
+
+    description (str, optional):
+        Additional description.
+
+Returns:
+    str:
+        Return request creation result.
+
+Database:
+    - orders
+    - return_requests
+
+Error Contract:
+    Never raises exceptions.
+"""
     code = order_code.strip().upper()
     check_res = check_return_eligibility(code)
     if "HỢP LỆ ĐỔI TRẢ" not in check_res:
@@ -287,7 +566,14 @@ def create_return_request(order_code: str, reason: str = "DEFECTIVE", descriptio
             conn.close()
             return f"LỖI: Không tìm thấy đơn hàng '{code}'."
             
-        ret_code = f"RET-{datetime.now().strftime('%M%S')}"
+        # Kiểm tra xem đơn hàng đã có yêu cầu đổi trả nào đang hoạt động chưa
+        cursor.execute("SELECT return_code, status FROM return_requests WHERE order_id = ? AND status NOT IN ('CANCELLED', 'REJECTED');", (o["id"],))
+        existing_ret = cursor.fetchone()
+        if existing_ret:
+            conn.close()
+            return f"⚠️ ĐƠN HÀNG ĐÃ CÓ ĐƠN ĐỔI TRẢ: Mã đổi trả '{existing_ret['return_code']}' đang ở trạng thái {existing_ret['status']}."
+
+        ret_code = f"RET-{random.randint(1000, 9999)}"
         valid_reason = reason.upper() if reason.upper() in ['DEFECTIVE', 'WRONG_ITEM', 'DAMAGED', 'MIND_CHANGE'] else 'DEFECTIVE'
         
         cursor.execute("""
@@ -311,6 +597,24 @@ def create_return_request(order_code: str, reason: str = "DEFECTIVE", descriptio
 
 def get_return_request_status(order_code: str) -> str:
     """Tra cứu tiến độ đơn đổi trả trong SQLite."""
+    """
+Retrieve return request information.
+
+Args:
+    order_code (str):
+        Order code or return code.
+
+Returns:
+    str:
+        Return request status.
+
+Database:
+    - return_requests
+    - orders
+
+Error Contract:
+    Never raises exceptions.
+"""
     code = order_code.strip().upper()
     try:
         conn = get_connection()
@@ -336,6 +640,27 @@ def get_return_request_status(order_code: str) -> str:
 
 def cancel_return_request(return_id: str) -> str:
     """Hủy đơn đổi trả nếu ở trạng thái REQUESTED."""
+    """
+Cancel a return request.
+
+Business Rules:
+    - Request must exist.
+    - Only REQUESTED status can be cancelled.
+
+Args:
+    return_id (str):
+        Return request code.
+
+Returns:
+    str:
+        Cancellation result.
+
+Database:
+    - return_requests
+
+Error Contract:
+    Never raises exceptions.
+"""
     rid = return_id.strip().upper()
     try:
         conn = get_connection()
@@ -348,7 +673,7 @@ def cancel_return_request(return_id: str) -> str:
             conn.close()
             return f"LỖI: Không tìm thấy mã yêu cầu đổi trả '{return_id}'."
             
-        if r["status"] == "REQUESTED":
+        if r["status"] in ["REQUESTED", "REVIEWING"]:
             cursor.execute("UPDATE return_requests SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE return_code = ?;", (rid,))
             conn.commit()
             conn.close()
@@ -362,6 +687,23 @@ def cancel_return_request(return_id: str) -> str:
 
 def get_user_profile(user_id: int = 1) -> str:
     """Tra cứu thông tin tài khoản người dùng từ bảng users SQLite."""
+    """
+Retrieve customer profile information.
+
+Args:
+    user_id (int):
+        Customer ID.
+
+Returns:
+    str:
+        User profile information.
+
+Database:
+    - users
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -381,6 +723,42 @@ def get_user_profile(user_id: int = 1) -> str:
 
 def add_product(admin_id: int, name: str, category_id: int, price: float, stock: int, description: str = "Sản phẩm mới") -> str:
     """Admin: Thêm sản phẩm mới vào danh mục sản phẩm trong SQLite."""
+    """
+Add a new product to the catalog.
+
+Business Rules:
+    - Caller must have ADMIN role.
+
+Args:
+    admin_id (int):
+        Administrator ID.
+
+    name (str):
+        Product name.
+
+    category_id (int):
+        Product category.
+
+    price (float):
+        Product price.
+
+    stock (int):
+        Initial inventory.
+
+    description (str, optional):
+        Product description.
+
+Returns:
+    str:
+        Product creation result.
+
+Database:
+    - users
+    - products
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):
@@ -404,6 +782,33 @@ def add_product(admin_id: int, name: str, category_id: int, price: float, stock:
 
 def update_product_stock(admin_id: int, product_id: int, new_stock: int) -> str:
     """Admin: Cập nhật số lượng tồn kho sản phẩm trong CSDL SQLite."""
+    """
+Update product inventory.
+
+Business Rules:
+    - Caller must have ADMIN role.
+
+Args:
+    admin_id (int):
+        Administrator ID.
+
+    product_id (int):
+        Product ID.
+
+    new_stock (int):
+        Updated inventory quantity.
+
+Returns:
+    str:
+        Update result.
+
+Database:
+    - users
+    - products
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):
@@ -427,6 +832,34 @@ def update_product_stock(admin_id: int, product_id: int, new_stock: int) -> str:
 
 def update_order_status(admin_id: int, order_code: str, new_status: str) -> str:
     """Admin: Cập nhật trạng thái đơn hàng trong SQLite (PENDING, CONFIRMED, PACKING, SHIPPING, DELIVERED, CANCELLED)."""
+    """
+Update order status.
+
+Business Rules:
+    - Caller must have ADMIN role.
+    - Status must be valid.
+
+Args:
+    admin_id (int):
+        Administrator ID.
+
+    order_code (str):
+        Order code.
+
+    new_status (str):
+        Target order status.
+
+Returns:
+    str:
+        Update result.
+
+Database:
+    - users
+    - orders
+
+Error Contract:
+    Never raises exceptions.
+"""
     code = order_code.strip().upper()
     valid_statuses = ['PENDING', 'CONFIRMED', 'PACKING', 'SHIPPING', 'DELIVERED', 'CANCELLED']
     status_upper = new_status.strip().upper()
@@ -455,6 +888,37 @@ def update_order_status(admin_id: int, order_code: str, new_status: str) -> str:
 
 def review_return_request(admin_id: int, return_code: str, action: str, note: str = "Đã xem xét") -> str:
     """Admin: Duyệt (APPROVED) hoặc Từ chối (REJECTED) đơn đổi trả từ khách hàng."""
+    """
+Approve or reject a return request.
+
+Business Rules:
+    - Caller must have ADMIN role.
+    - Action must be APPROVE or REJECT.
+
+Args:
+    admin_id (int):
+        Administrator ID.
+
+    return_code (str):
+        Return request code.
+
+    action (str):
+        APPROVE or REJECT.
+
+    note (str, optional):
+        Admin note.
+
+Returns:
+    str:
+        Review result.
+
+Database:
+    - users
+    - return_requests
+
+Error Contract:
+    Never raises exceptions.
+"""
     rcode = return_code.strip().upper()
     act = action.strip().upper()
     
@@ -469,20 +933,66 @@ def review_return_request(admin_id: int, return_code: str, action: str, note: st
             return f"🚫 TỪ CHỐI QUYỀN: User #{admin_id} không có quyền ADMIN."
             
         cursor = conn.cursor()
-        cursor.execute("UPDATE return_requests SET status = ?, description = description || ' | Admin Note: ' || ?, updated_at = CURRENT_TIMESTAMP WHERE return_code = ?;", (target_status, note, rcode))
-        if cursor.rowcount == 0:
+        
+        # 1. Kiểm tra trạng thái hiện tại của đơn đổi trả
+        cursor.execute("SELECT status, description FROM return_requests WHERE return_code = ?;", (rcode,))
+        r = cursor.fetchone()
+        if not r:
             conn.close()
             return f"LỖI: Không tìm thấy mã yêu cầu đổi trả '{rcode}'."
             
+        current_status = r["status"]
+        if current_status in ["APPROVED", "REJECTED", "COMPLETED", "CANCELLED"]:
+            conn.close()
+            return f"❌ ĐƠN ĐÃ ĐƯỢC XỬ LÝ: Yêu cầu đổi trả '{rcode}' đã ở trạng thái '{current_status}', không thể xử lý lại."
+            
+        # 2. Xóa các ghi chú cũ nếu có để tránh bị lặp chuỗi "Admin Note: ..."
+        orig_desc = r["description"] or ""
+        base_desc = orig_desc.split(" | Admin Note:")[0]
+        new_desc = f"{base_desc} | Admin Note: {note}"
+        
+        cursor.execute("""
+            UPDATE return_requests 
+            SET status = ?, description = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE return_code = ?;
+        """, (target_status, new_desc, rcode))
+        
         conn.commit()
         conn.close()
-        return f"✅ DUYỆT ĐỔI TRẢ THÀNH CÔNG (ADMIN)! Yêu cầu '{rcode}' đã chuyển sang trạng thái '{target_status}'. Ghi chú: {note}."
+        return f"✅ DUYỆT ĐỔI TRẢ THÀNH CÔNG (ADMIN)! Yêu cầu '{rcode}' đã chuyển sang trạng thái '{target_status}'."
     except Exception as e:
         return f"LỖI THỰC THI SQLITE (review_return_request): {str(e)}"
 
 
 def get_admin_dashboard_summary(admin_id: int = 3) -> str:
     """Admin: Xem báo cáo thống kê tổng quan (Đơn hàng, Đổi trả chờ duyệt, Sản phẩm, Doanh thu)."""
+    """
+Retrieve dashboard statistics for administrators.
+
+Business Rules:
+    - Caller must have ADMIN role.
+
+Args:
+    admin_id (int):
+        Administrator ID.
+
+Returns:
+    str:
+        Dashboard summary including:
+            - Total orders
+            - Pending return requests
+            - Product count
+            - Revenue
+
+Database:
+    - users
+    - orders
+    - return_requests
+    - products
+
+Error Contract:
+    Never raises exceptions.
+"""
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):

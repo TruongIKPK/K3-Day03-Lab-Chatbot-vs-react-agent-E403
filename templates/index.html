@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Marked.js Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <style>
         :root {
@@ -343,6 +345,14 @@
             color: var(--text-main);
             border-bottom-left-radius: 4px;
         }
+
+        .msg-bubble.assistant p { margin-bottom: 6px; }
+        .msg-bubble.assistant p:last-child { margin-bottom: 0; }
+        .msg-bubble.assistant ul, .msg-bubble.assistant ol { margin-left: 20px; margin-bottom: 8px; }
+        .msg-bubble.assistant blockquote { border-left: 3px solid var(--primary); padding-left: 10px; margin: 8px 0; color: var(--text-muted); font-style: italic; }
+        .msg-bubble.assistant code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+        .msg-bubble.assistant pre { background: rgba(15,23,42,0.9); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+        .msg-bubble.assistant pre code { background: transparent; padding: 0; }
 
         .chat-input-area {
             padding: 16px 20px;
@@ -899,8 +909,32 @@
             </div>
         </div>
 
-        <!-- VIEW 6: QUẢN TRỊ VIÊN - QUẢN LÝ SẢN PHẨM -->
+        <!-- VIEW 6: QUẢN TRỊ VIÊN - QUẢN LÝ SẢN PHẨM & TỒN KHO -->
         <div class="view-container" id="view-admin-products">
+            <!-- Table 1: Danh sách Sản Phẩm & Điều Chỉnh Kho -->
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">🛍️ Danh Sách Tất Cả Sản Phẩm & Điều Chỉnh Tồn Kho (Admin View)</div>
+                    <button class="btn-action btn-sm" onclick="loadAdminProducts()"><i class="fa-solid fa-sync"></i> Tải lại danh sách</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Sản Phẩm</th>
+                            <th>Giá Bán</th>
+                            <th>Tồn Kho Hiện Tại</th>
+                            <th>Trạng Thái Kho</th>
+                            <th>Cập Nhật Tồn Kho Mới</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminProductsTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Form 2: Thêm Sản Phẩm Mới -->
             <div class="data-table-card">
                 <div class="table-title" style="margin-bottom:16px;">➕ Thêm Sản Phẩm Mới Vào CSDL Kho (Admin Only)</div>
                 <form id="addProductForm" onsubmit="submitAddProduct(event)" class="form-grid">
@@ -931,9 +965,36 @@
 
         <!-- VIEW 7: QUẢN TRỊ VIÊN - QUẢN LÝ TẤT CẢ ĐƠN HÀNG & DUYỆT ĐỔI TRẢ -->
         <div class="view-container" id="view-admin-orders">
+            <!-- Table 1: Quản lý Tất cả Đơn hàng trong CSDL -->
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">📦 Quản Lý Tất Cả Đơn Hàng Trên Hệ Thống (Admin View)</div>
+                    <button class="btn-action btn-sm" onclick="loadAdminOrders()"><i class="fa-solid fa-sync"></i> Tải lại đơn hàng</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mã Đơn</th>
+                            <th>Khách Hàng</th>
+                            <th>Sản Phẩm Chi Tiết</th>
+                            <th>Tổng Tiền</th>
+                            <th>Thanh Toán</th>
+                            <th>Trạng Thái Hiện Tại</th>
+                            <th>Ngày Tạo</th>
+                            <th>Cập Nhật Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminAllOrdersTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table 2: Duyệt Yêu Cầu Đổi Trả từ Khách hàng -->
             <div class="data-table-card">
                 <div class="table-header">
                     <div class="table-title">🔑 Phê Duyệt Yêu Cầu Đổi Trả (Admin Review)</div>
+                    <button class="btn-action btn-sm" onclick="loadAdminReturns()"><i class="fa-solid fa-sync"></i> Tải lại đơn đổi trả</button>
                 </div>
                 <table>
                     <thead>
@@ -1297,14 +1358,16 @@
                 loadAdminStats();
             }
             else if (viewName === 'admin-products') {
-                document.getElementById('pageTitle').innerText = 'Admin Quản Lý Sản Phẩm';
+                document.getElementById('pageTitle').innerText = 'Admin Quản Lý Sản Phẩm & Tồn Kho';
                 const item = document.getElementById('navAdminProd');
                 if (item) item.classList.add('active');
+                loadAdminProducts();
             }
             else if (viewName === 'admin-orders') {
-                document.getElementById('pageTitle').innerText = 'Admin Duyệt Đổi Trả';
+                document.getElementById('pageTitle').innerText = 'Admin Quản Lý Tất Cả Đơn Hàng & Duyệt Đổi Trả';
                 const item = document.getElementById('navAdminOrders');
                 if (item) item.classList.add('active');
+                loadAdminOrders();
                 loadAdminReturns();
             }
             else if (viewName === 'admin-users') {
@@ -1320,6 +1383,19 @@
             sendMessage();
         }
 
+        let currentSessionId = null;
+
+        function formatMarkdownText(rawText) {
+            if (!rawText) return '';
+            if (window.marked && typeof window.marked.parse === 'function') {
+                return window.marked.parse(rawText);
+            }
+            return rawText
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        }
+
         async function sendMessage() {
             const inputEl = document.getElementById('userInput');
             const query = inputEl.value.trim();
@@ -1332,18 +1408,21 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             const traceContainer = document.getElementById('traceContainer');
-            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang suy luận và truy vấn SQLite cho ${currentUser.role}...</div></div>`;
+            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang truy xuất bộ nhớ context và suy luận cho ${currentUser.role}...</div></div>`;
 
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role })
+                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role, session_id: currentSessionId })
                 });
 
                 const data = await res.json();
+                if (data.session_id) {
+                    currentSessionId = data.session_id;
+                }
 
-                chatMessages.innerHTML += `<div class="msg-bubble assistant">${data.response}</div>`;
+                chatMessages.innerHTML += `<div class="msg-bubble assistant">${formatMarkdownText(data.response)}</div>`;
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
                 if (data.trace && data.trace.length > 0) {
@@ -1453,6 +1532,52 @@
             document.getElementById('statRevenue').innerText = (data.revenue || 0).toLocaleString() + ' VNĐ';
         }
 
+        async function loadAdminProducts() {
+            const res = await fetch('/api/products');
+            const data = await res.json();
+            const tbody = document.getElementById('adminProductsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            if (data.products && data.products.length > 0) {
+                data.products.forEach(p => {
+                    const badgeClass = p.stock > 0 ? 'badge-delivered' : 'badge-cancelled';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${p.id}</td>
+                            <td><strong>${p.name}</strong></td>
+                            <td>${p.price.toLocaleString()} VNĐ</td>
+                            <td><strong style="color:${p.stock > 0 ? '#34d399' : '#f87171'};">${p.stock} cái</strong></td>
+                            <td><span class="badge ${badgeClass}">${p.status}</span></td>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <input type="number" id="stockInput_${p.id}" value="${p.stock}" min="0" style="width:80px; background:rgba(15,23,42,0.9); color:white; border:1px solid var(--bg-card-border); padding:4px 8px; border-radius:4px; font-size:12px;">
+                                    <button class="btn-action btn-sm" onclick="updateStock(${p.id})">Cập Nhật Kho</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Chưa có sản phẩm nào trong kho.</td></tr>`;
+            }
+        }
+
+        async function updateStock(productId) {
+            const stockVal = parseInt(document.getElementById(`stockInput_${productId}`).value);
+            if (isNaN(stockVal)) return;
+
+            const res = await fetch('/api/admin/product-stock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUser.id, product_id: productId, new_stock: stockVal })
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            loadAdminProducts();
+        }
+
         async function submitAddProduct(e) {
             e.preventDefault();
             const payload = {
@@ -1472,7 +1597,64 @@
 
             const result = await res.json();
             alert(result.message);
-            switchView('catalog');
+            loadAdminProducts();
+        }
+
+        async function loadAdminOrders() {
+            const res = await fetch('/api/orders?is_admin=true');
+            const data = await res.json();
+            const tbody = document.getElementById('adminAllOrdersTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            if (data.orders && data.orders.length > 0) {
+                data.orders.forEach(o => {
+                    const badgeClass = o.status === 'DELIVERED' ? 'badge-delivered' : o.status === 'PENDING' ? 'badge-pending' : o.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-shipping';
+                    
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${o.order_code}</strong></td>
+                            <td>${o.user_name || 'User #' + o.user_id}</td>
+                            <td>${o.items}</td>
+                            <td>${o.total_amount.toLocaleString()} VNĐ</td>
+                            <td>${o.payment_method}</td>
+                            <td><span class="badge ${badgeClass}">${o.status}</span></td>
+                            <td>${o.created_at}</td>
+                            <td>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <select id="statusSelect_${o.order_code}" style="background:rgba(15,23,42,0.9); color:white; border:1px solid var(--bg-card-border); padding:4px 8px; border-radius:4px; font-size:11px;">
+                                        <option value="PENDING" ${o.status==='PENDING'?'selected':''}>PENDING</option>
+                                        <option value="CONFIRMED" ${o.status==='CONFIRMED'?'selected':''}>CONFIRMED</option>
+                                        <option value="PACKING" ${o.status==='PACKING'?'selected':''}>PACKING</option>
+                                        <option value="SHIPPING" ${o.status==='SHIPPING'?'selected':''}>SHIPPING</option>
+                                        <option value="DELIVERED" ${o.status==='DELIVERED'?'selected':''}>DELIVERED</option>
+                                        <option value="CANCELLED" ${o.status==='CANCELLED'?'selected':''}>CANCELLED</option>
+                                    </select>
+                                    <button class="btn-action btn-sm" onclick="changeOrderStatus('${o.order_code}')">Lưu</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Chưa có đơn hàng nào trên hệ thống.</td></tr>`;
+            }
+        }
+
+        async function changeOrderStatus(orderCode) {
+            const selectEl = document.getElementById(`statusSelect_${orderCode}`);
+            if (!selectEl) return;
+            const newStatus = selectEl.value;
+
+            const res = await fetch('/api/admin/order-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUser.id, order_code: orderCode, new_status: newStatus })
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            loadAdminOrders();
         }
 
         async function loadAdminReturns() {
@@ -1483,20 +1665,31 @@
             
             if (data.returns && data.returns.length > 0) {
                 data.returns.forEach(r => {
+                    let actionHtml = '';
+                    if (r.status === 'REQUESTED' || r.status === 'REVIEWING') {
+                        actionHtml = `
+                            <button class="btn-action btn-sm btn-success" onclick="reviewReturn('${r.return_code}', 'APPROVE')">Duyệt (Approve)</button>
+                            <button class="btn-action btn-sm btn-danger" onclick="reviewReturn('${r.return_code}', 'REJECT')">Từ Chối</button>
+                        `;
+                    } else {
+                        actionHtml = `<span style="font-size:12px; color:var(--text-muted); font-style:italic;">Đã xử lý (${r.status})</span>`;
+                    }
+
+                    const badgeClass = r.status === 'APPROVED' ? 'badge-delivered' : r.status === 'REJECTED' ? 'badge-cancelled' : 'badge-pending';
+
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${r.return_code}</strong></td>
                             <td>${r.order_code}</td>
                             <td>${r.user_name || 'User #' + r.user_id}</td>
                             <td>${r.reason} (${r.description})</td>
-                            <td><span class="badge badge-pending">${r.status}</span></td>
-                            <td>
-                                <button class="btn-action btn-sm btn-success" onclick="reviewReturn('${r.return_code}', 'APPROVE')">Duyệt (Approve)</button>
-                                <button class="btn-action btn-sm btn-danger" onclick="reviewReturn('${r.return_code}', 'REJECT')">Từ Chối</button>
-                            </td>
+                            <td><span class="badge ${badgeClass}">${r.status}</span></td>
+                            <td>${actionHtml}</td>
                         </tr>
                     `;
                 });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Chưa có yêu cầu đổi trả nào.</td></tr>`;
             }
         }
 

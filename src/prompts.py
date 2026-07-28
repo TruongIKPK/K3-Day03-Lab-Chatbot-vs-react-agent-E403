@@ -54,7 +54,7 @@ Action: tên_công_cụ[tham_số]
 
 Khi đã thu thập đủ thông tin từ Observation để kết luận hoặc trả lời người dùng, bạn PHẢI xuất kết quả theo định dạng:
 Thought: Tôi đã có đủ thông tin để kết luận.
-Final Answer: Câu trả lời hoàn chỉnh, trình bày đẹp mắt, ngắn gọn, lịch sự gửi cho người dùng.
+Final Answer: Câu trả lời hoàn chỉnh, trình bày đẹp mắt bằng Markdown chuẩn (in đậm **text**, danh sách gạch đầu dòng `- item`, xuống dòng rõ ràng), lịch sự gửi cho người dùng.
 
 ---
 
@@ -98,12 +98,33 @@ OUT_OF_DOMAIN_KEYWORDS = [
 
 def check_guardrails(query: str, role: str = "CUSTOMER") -> dict:
     """
-    Hàm kiểm tra phanh Guardrails an toàn (Security & Scope Protection) trước khi gửi cho LLM.
+    Hàm kiểm tra phanh Guardrails an toàn (Security, Scope & Input Validation) trước khi gửi cho LLM.
     Trả về: {"safe": bool, "type": str, "reason": str}
     """
-    query_lower = query.lower()
+    import re
+    query_lower = query.strip().lower()
     
-    # Guardrail 1: Chống câu hỏi Ngoài Phạm Vi (Out-of-Domain Guardrail)
+    # Guardrail 1: Nhận diện câu hỏi quá ngắn hoặc ký tự vô nghĩa (Gibberish Input: aa, abc, asdf, 123,...)
+    gibberish_list = ["aa", "abc", "abcd", "asdf", "qwe", "qwerty", "xyz", "xxx", "zzz", "aaa", "bbb", "ccc", "123", "1234", "test"]
+    is_repetition = bool(re.match(r"^(.)\1+$", query_lower))
+    is_short_nonsense = query_lower in gibberish_list or (len(query_lower) <= 3 and query_lower not in ["hi", "alo", "ok", "hey"])
+    
+    if is_repetition or is_short_nonsense:
+        return {
+            "safe": False,
+            "type": "GIBBERISH_INPUT",
+            "reason": (
+                "🤔 Tôi chưa hiểu rõ yêu cầu của bạn do tin nhắn chứa ký tự chưa rõ nghĩa hoặc quá ngắn.<br><br>"
+                "💡 <strong>Bạn có thể thử hỏi theo các gợi ý bên dưới:</strong><br>"
+                "- 📋 <em>'Xem danh sách đơn hàng của tôi'</em> (Tra cứu tất cả đơn hàng hiện có)<br>"
+                "- 📦 <em>'Kiểm tra đơn hàng ORD-8899'</em> (Tra cứu vận chuyển & ngày giao)<br>"
+                "- 🔄 <em>'Tôi muốn đổi trả đơn ORD-8899'</em> (Kiểm tra chính sách 7 ngày & khởi tạo đổi trả)<br>"
+                "- 📝 <em>'Hủy đơn hàng ORD-5500'</em><br>"
+                "- 🛒 <em>'Tìm kiếm sản phẩm áo polo'</em> (Tra cứu giá bán & tồn kho)"
+            )
+        }
+    
+    # Guardrail 2: Chống câu hỏi Ngoài Phạm Vi (Out-of-Domain Guardrail)
     for kw in OUT_OF_DOMAIN_KEYWORDS:
         if kw in query_lower:
             return {
@@ -112,7 +133,7 @@ def check_guardrails(query: str, role: str = "CUSTOMER") -> dict:
                 "reason": "🚫 Xin lỗi, tôi là Trợ lý AI E-Commerce chỉ hỗ trợ các dịch vụ mua sắm, đơn hàng, vận chuyển và đổi trả sản phẩm. Tôi không thể hỗ trợ các câu hỏi ngoài phạm vi này. Bạn có cần hỗ trợ gì về đơn hàng hay sản phẩm không?"
             }
     
-    # Guardrail 2: Chống injection truy cập Admin trái phép
+    # Guardrail 3: Chống injection truy cập Admin trái phép
     if role.upper() == "CUSTOMER":
         admin_keywords = ["xóa database", "drop table", "mật khẩu admin", "update_product_stock", "review_return_request"]
         for kw in admin_keywords:
