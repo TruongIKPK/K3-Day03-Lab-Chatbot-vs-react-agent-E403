@@ -185,22 +185,24 @@ def api_get_orders():
     
     if is_admin:
         query = """
-            SELECT o.order_code, o.user_id, u.full_name AS user_name, o.status, o.total_amount, o.payment_method, o.created_at,
+            SELECT o.order_code, o.user_id, u.full_name AS user_name, o.status, o.total_amount, o.payment_method, o.created_at, s.delivered_at,
                    GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')', ', ') AS items
             FROM orders o
             JOIN users u ON o.user_id = u.id
             JOIN order_items oi ON o.id = oi.order_id
             JOIN products p ON oi.product_id = p.id
+            LEFT JOIN shipping s ON o.id = s.order_id
             GROUP BY o.id ORDER BY o.created_at DESC;
         """
         cursor.execute(query)
     else:
         query = """
-            SELECT o.order_code, o.user_id, o.status, o.total_amount, o.payment_method, o.created_at,
+            SELECT o.order_code, o.user_id, o.status, o.total_amount, o.payment_method, o.created_at, s.delivered_at,
                    GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')', ', ') AS items
             FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
             JOIN products p ON oi.product_id = p.id
+            LEFT JOIN shipping s ON o.id = s.order_id
             WHERE o.user_id = ?
             GROUP BY o.id ORDER BY o.created_at DESC;
         """
@@ -300,6 +302,22 @@ def api_user_profile():
     return jsonify({"success": True, "profile": profile_info})
 
 
+@app.route("/api/chat/history", methods=["GET"])
+def api_chat_history():
+    """Lấy lịch sử tin nhắn hội thoại từ SQLite để hiển thị lên khung Chat Web App"""
+    user_id = request.args.get("user_id", 1, type=int)
+    input_session_id = request.args.get("session_id")
+    
+    session_id = get_or_create_session(user_id, input_session_id)
+    history = get_chat_history(session_id, limit=50)
+    
+    return jsonify({
+        "success": True,
+        "session_id": session_id,
+        "history": history
+    })
+
+
 # --- 🧠 DYNAMIC REACT AI AGENT WORKFLOW & TOOL CALLING ---
 
 def run_react_agent_workflow(user_query: str, user_id: int, user_role: str, session_id: str):
@@ -384,12 +402,83 @@ def run_react_agent_workflow(user_query: str, user_id: int, user_role: str, sess
                 })
                 current_prompt += f"\nThought: {thought_str}\nObservation: {obs_error}\n"
         else:
-            # Nếu LLM phản hồi trực tiếp không có Action cũng không có Final Answer
+            # Nếu LLM phản hồi trực tiếp không chứa Action (hoặc bị lỗi API Provider)
+            # Kiểm tra xem người dùng có truyền mã đơn ORD-XXXX hoặc yêu cầu tra cứu không để tự động kích hoạt Tool Call dự phòng
+            order_match = re.search(r"ORD\s*-\s*(\d+)", user_query.upper())
+            if order_match:
+                code = f"ORD-{order_match.group(1)}"
+                query_lower = user_query.lower()
+                
+                # Ý định 1: Đổi trả / Trả hàng / Tạo ticket đổi trả
+                if any(kw in query_lower for kw in ["trả hàng", "tra hang", "đổi trả", "doi tra", "ticket", "return", "hoàn tiền", "hoan tien"]):
+                    eligibility = check_return_eligibility(code)
+                    trace_steps.append({
+                        "thought": f"Khách hàng yêu cầu tạo ticket đổi trả đơn {code}. Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
+                        "action": f"check_return_eligibility['{code}']",
+                        "observation": eligibility
+                    })
+                    
+                    if "HỢP LỆ ĐỔI TRẢ" in eligibility:
+                        create_res = create_return_request(code, "DEFECTIVE", f"Khách hàng yêu cầu tạo ticket đổi trả từ Web Chat")
+                        trace_steps.append({
+                            "thought": f"Đơn hàng {code} hợp lệ đổi trả. Kích hoạt tool create_return_request.",
+                            "action": f"create_return_request['{code}', 'DEFECTIVE']",
+                            "observation": create_res
+                        })
+                        final_answer = f"✅ <strong>ĐÃ KHỞI TẠO TICKET ĐỔI TRẢ THÀNH CÔNG CHO ĐƠN HÀNG {code}!</strong><br><br>{create_res}"
+                    else:
+                        final_answer = f"⚠️ <strong>Không thể tạo ticket đổi trả cho đơn hàng {code}:</strong><br>{eligibility}"
+                    return final_answer, trace_steps
+
+                # Ý định 2: Hủy đơn hàng
+                elif any(kw in query_lower for kw in ["hủy", "huy", "cancel"]):
+                    cancel_res = cancel_order(code, "Khách hàng hủy từ Web Chat")
+                    trace_steps.append({
+                        "thought": f"Khách hàng yêu cầu hủy đơn hàng {code}. Gọi tool cancel_order.",
+                        "action": f"cancel_order['{code}']",
+                        "observation": cancel_res
+                    })
+                    return f"📝 <strong>Thông báo xử lý hủy đơn hàng {code}:</strong><br>{cancel_res}", trace_steps
+
+                # Ý định 3: Tra cứu thông tin đơn hàng & vị trí vận chuyển (Default)
+                else:
+                    details = get_order_details(code)
+                    shipping = get_shipping_status(code)
+                    
+                    trace_steps.append({
+                        "thought": f"Phát hiện truy vấn mã đơn hàng {code}. Kích hoạt Tool Call tra cứu dữ liệu CSDL SQLite.",
+                        "action": f"get_order_details['{code}'] & get_shipping_status['{code}']",
+                        "observation": f"{details}\n{shipping}"
+                    })
+                    
+                    fallback_answer = (
+                        f"📦 <strong>Thông tin tra cứu đơn hàng {code}:</strong><br><br>"
+                        f"📋 <strong>Chi tiết đơn hàng:</strong><br><pre style='font-family:sans-serif;'>{details}</pre><br>"
+                        f"🚚 <strong>Hành trình vận chuyển:</strong><br><pre style='font-family:sans-serif;'>{shipping}</pre>"
+                    )
+                    return fallback_answer, trace_steps
+
+            query_lower = user_query.lower()
+            if any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "xem đơn hàng"]):
+                orders_res = get_user_orders(user_id=user_id, status_filter="ALL")
+                trace_steps.append({
+                    "thought": f"Khách hàng xem danh sách đơn hàng. Kích hoạt tool get_user_orders[{user_id}].",
+                    "action": f"get_user_orders[{user_id}, 'ALL']",
+                    "observation": orders_res
+                })
+                return f"📋 <strong>Danh sách đơn hàng của bạn:</strong><br><pre style='font-family:sans-serif;'>{orders_res}</pre>", trace_steps
+
+            display_thought = thought_str if (thought_str and not thought_str.startswith("[")) else "Tiếp nhận câu hỏi từ người dùng."
             trace_steps.append({
-                "thought": thought_str,
+                "thought": display_thought,
                 "action": "llm_direct_response",
                 "observation": "Phản hồi trực tiếp từ LLM"
             })
+            
+            if llm_out.startswith("[") and "Error" in llm_out:
+                clean_err_ans = f"⚠️ <strong>Thông báo kết nối API:</strong><br>{llm_out}<br><br>💡 <em>Mẹo: Bạn có thể chọn <code>LLM_PROVIDER=mock</code> trong tệp <code>.env</code> để giả lập ReAct Agent offline hoàn toàn miễn phí.</em>"
+                return clean_err_ans, trace_steps
+
             return llm_out.strip(), trace_steps
             
     # Hết MAX_ITERATIONS

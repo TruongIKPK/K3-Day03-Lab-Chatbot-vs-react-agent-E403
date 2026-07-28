@@ -817,7 +817,8 @@
                             <th>Tổng Tiền</th>
                             <th>Thanh Toán</th>
                             <th>Trạng Thái Đơn</th>
-                            <th>Ngày Tạo</th>
+                            <th>Ngày Tạo Đơn</th>
+                            <th>Ngày Giao Thực Tế (Hạn 7 Ngày)</th>
                         </tr>
                     </thead>
                     <tbody id="myOrdersTableBody">
@@ -1108,10 +1109,16 @@
                 <div style="text-align:center; margin-top:16px; font-size:13px; color:var(--text-muted);">
                     Chưa có tài khoản? <a href="#" onclick="toggleAuthForm('register')" style="color:var(--primary); font-weight:600;">Đăng ký ngay</a>
                 </div>
-                <div style="margin-top:20px; padding:12px; background:rgba(255,255,255,0.05); border-radius:8px; font-size:11px; color:var(--text-muted);">
-                    💡 <strong>Tài khoản thử nghiệm sẵn:</strong><br>
-                    • Customer: <code>nguyenvana@gmail.com</code> / <code>pass123</code><br>
-                    • Admin: <code>admin@store.com</code> / <code>adminpass</code>
+                <div style="margin-top:20px; padding:14px; background:rgba(255,255,255,0.05); border:1px solid var(--bg-card-border); border-radius:10px; font-size:12px; color:var(--text-muted);">
+                    💡 <strong>Đăng Nhập Nhanh 1-Click Thử Nghiệm:</strong>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                        <button type="button" class="btn-action btn-sm" style="flex:1; font-size:11px;" onclick="quickLogin('nguyenvana@gmail.com', 'pass123')">
+                            👤 Khách Hàng (Nguyễn Văn A)
+                        </button>
+                        <button type="button" class="btn-action btn-sm" style="flex:1; font-size:11px; background:linear-gradient(135deg, #ef4444, #dc2626);" onclick="quickLogin('admin@store.com', 'adminpass')">
+                            🔑 Quản Trị Viên (Admin Kho)
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1163,11 +1170,19 @@
         let selectedProductForCheckout = null;
 
         function updateUIUser() {
+            currentSessionId = null;
+            if (currentUser) {
+                try {
+                    localStorage.setItem('shopease_user', JSON.stringify(currentUser));
+                } catch (e) {}
+            }
+            
             document.getElementById('userName').innerText = currentUser.full_name;
             document.getElementById('userAvatar').innerText = currentUser.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             document.getElementById('userRoleTag').innerText = currentUser.role;
             document.getElementById('loginBtnText').innerText = currentUser.full_name;
-            document.getElementById('welcomeName').innerText = currentUser.full_name;
+            const welcomeSpan = document.getElementById('welcomeName');
+            if (welcomeSpan) welcomeSpan.innerText = currentUser.full_name;
 
             if (currentUser.role === 'ADMIN') {
                 document.getElementById('userRoleTag').style.background = 'rgba(239, 68, 68, 0.2)';
@@ -1192,6 +1207,13 @@
             }
         }
 
+        function quickLogin(email, password) {
+            document.getElementById('loginEmail').value = email;
+            document.getElementById('loginPassword').value = password;
+            const fakeEvent = { preventDefault: () => {} };
+            handleLogin(fakeEvent);
+        }
+
         function openLoginModal() {
             document.getElementById('authModal').classList.add('active');
         }
@@ -1211,7 +1233,7 @@
         }
 
         async function handleLogin(e) {
-            e.preventDefault();
+            if (e && e.preventDefault) e.preventDefault();
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
 
@@ -1227,7 +1249,6 @@
                     currentUser = data.user;
                     updateUIUser();
                     closeAuthModal();
-                    alert(`✅ Đăng nhập thành công! Tài khoản: ${currentUser.full_name} (${currentUser.role})`);
                 } else {
                     alert(`❌ ${data.message}`);
                 }
@@ -1332,6 +1353,7 @@
                 document.getElementById('pageTitle').innerText = 'Tra Cứu AI Agent & ReAct Trace';
                 const item = document.getElementById('navCustChat');
                 if (item) item.classList.add('active');
+                loadChatHistory();
             }
             else if (viewName === 'my-orders') {
                 document.getElementById('pageTitle').innerText = 'Đơn Hàng Của Tôi';
@@ -1396,6 +1418,38 @@
                 .replace(/\*(.*?)\*/g, '<em>$1</em>');
         }
 
+        async function loadChatHistory() {
+            try {
+                const res = await fetch(`/api/chat/history?user_id=${currentUser.id}&session_id=${currentSessionId || ''}`);
+                const data = await res.json();
+                
+                if (data.session_id) {
+                    currentSessionId = data.session_id;
+                }
+
+                const chatMessages = document.getElementById('chatMessages');
+                // Luôn xóa sạch khung chat và tạo câu chào đón người dùng hiện tại
+                chatMessages.innerHTML = `
+                    <div class="msg-bubble assistant">
+                        👋 Xin chào <span>${currentUser.full_name}</span>!<br>
+                        Tôi là <strong>ShopEase AI Assistant (ReAct Agent Cấp 3)</strong>.<br>
+                        Tôi có thể giúp bạn <strong>Tra cứu thông tin đơn hàng</strong>, <strong>Theo dõi hành trình vận chuyển GHN/GHTK</strong> và <strong>Tự động kiểm tra chính sách & tạo đơn đổi trả 7 ngày</strong>!
+                    </div>
+                `;
+                
+                if (data.history && data.history.length > 0) {
+                    data.history.forEach(msg => {
+                        const roleClass = msg.role.toLowerCase() === 'user' ? 'user' : 'assistant';
+                        const formattedContent = roleClass === 'assistant' ? formatMarkdownText(msg.message) : msg.message;
+                        chatMessages.innerHTML += `<div class="msg-bubble ${roleClass}">${formattedContent}</div>`;
+                    });
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            } catch (err) {
+                console.error('Lỗi tải lịch sử chat:', err);
+            }
+        }
+
         async function sendMessage() {
             const inputEl = document.getElementById('userInput');
             const query = inputEl.value.trim();
@@ -1446,6 +1500,16 @@
             }
         }
 
+        function getStatusBadgeHtml(status) {
+            if (status === 'DELIVERED') return `<span class="badge badge-delivered">DELIVERED</span>`;
+            if (status === 'RETURN_REQUESTED') return `<span class="badge badge-pending" style="background:rgba(245, 158, 11, 0.2); color:#fbbf24;">CHỜ DUYỆT ĐỔI TRẢ</span>`;
+            if (status === 'RETURNING') return `<span class="badge badge-shipping" style="background:rgba(168, 85, 247, 0.2); color:#c084fc;">ĐANG ĐỔI TRẢ</span>`;
+            if (status === 'RETURNED') return `<span class="badge badge-cancelled">ĐÃ ĐỔI TRẢ</span>`;
+            if (status === 'PENDING') return `<span class="badge badge-pending">PENDING</span>`;
+            if (status === 'CANCELLED') return `<span class="badge badge-cancelled">CANCELLED</span>`;
+            return `<span class="badge badge-shipping">${status}</span>`;
+        }
+
         async function loadMyOrders() {
             const res = await fetch(`/api/orders?user_id=${currentUser.id}`);
             const data = await res.json();
@@ -1454,20 +1518,21 @@
             
             if (data.orders && data.orders.length > 0) {
                 data.orders.forEach(o => {
-                    const badgeClass = o.status === 'DELIVERED' ? 'badge-delivered' : o.status === 'PENDING' ? 'badge-pending' : 'badge-shipping';
+                    const deliveredText = o.delivered_at ? `<span style="color:#34d399; font-weight:600;">${o.delivered_at}</span>` : `<span style="color:#f59e0b; font-style:italic;">Chưa giao</span>`;
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${o.order_code}</strong></td>
                             <td>${o.items}</td>
                             <td>${o.total_amount.toLocaleString()} VNĐ</td>
                             <td>${o.payment_method}</td>
-                            <td><span class="badge ${badgeClass}">${o.status}</span></td>
+                            <td>${getStatusBadgeHtml(o.status)}</td>
                             <td>${o.created_at}</td>
+                            <td>${deliveredText}</td>
                         </tr>
                     `;
                 });
             } else {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Không tìm thấy đơn hàng nào.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Không tìm thấy đơn hàng nào.</td></tr>`;
             }
         }
 
@@ -1618,7 +1683,7 @@
                             <td>${o.items}</td>
                             <td>${o.total_amount.toLocaleString()} VNĐ</td>
                             <td>${o.payment_method}</td>
-                            <td><span class="badge ${badgeClass}">${o.status}</span></td>
+                            <td>${getStatusBadgeHtml(o.status)}</td>
                             <td>${o.created_at}</td>
                             <td>
                                 <div style="display:flex; align-items:center; gap:6px;">
@@ -1728,7 +1793,19 @@
             }
         }
 
-        // Initialize UI
+        // Initialize UI & Restore Session
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('shopease_user');
+            if (savedUser) {
+                try {
+                    currentUser = JSON.parse(savedUser);
+                } catch (e) {
+                    console.error('Lỗi khôi phục session:', e);
+                }
+            }
+            updateUIUser();
+        });
+        
         updateUIUser();
     </script>
 </body>

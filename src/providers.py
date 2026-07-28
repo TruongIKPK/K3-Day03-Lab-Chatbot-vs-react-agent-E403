@@ -47,7 +47,7 @@ class GeminiProvider(BaseLLMProvider):
 
 
 class OpenAIProvider(BaseLLMProvider):
-    """OpenAI Provider (GPT-4o, GPT-3.5-turbo, etc.)"""
+    """OpenAI Provider (GPT-4o, GPT-4o-mini, etc. - Hỗ trợ gọi API trực tiếp qua HTTP requests)"""
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.model_name = model or os.getenv("LLM_MODEL") or "gpt-4o-mini"
@@ -56,18 +56,25 @@ class OpenAIProvider(BaseLLMProvider):
         if not self.api_key or self.api_key == "your_openai_api_key_here":
             return "[OpenAI Error]: Chưa cấu hình OPENAI_API_KEY trong file .env!"
         try:
-            import openai
-            client = openai.OpenAI(api_key=self.api_key)
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = client.chat.completions.create(
-                model=self.model_name,
-                messages=messages
-            )
-            return response.choices[0].message.content
+            payload = {
+                "model": self.model_name,
+                "messages": messages
+            }
+            res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
+            if res.status_code == 200:
+                data = res.json()
+                return data["choices"][0]["message"]["content"]
+            else:
+                return f"[OpenAI API Error {res.status_code}]: {res.text}"
         except Exception as e:
             return f"[OpenAI Exception]: {str(e)}"
 
@@ -132,12 +139,36 @@ class OpenRouterProvider(BaseLLMProvider):
 
 
 class MockProvider(BaseLLMProvider):
-    """Offline Mock Provider (Cho bài test không cần kết nối API)"""
+    """Offline Mock Provider (Hỗ trợ giả lập ReAct Tool Calling đầy đủ không cần API Key)"""
     def generate(self, prompt: str, system_prompt: str = "") -> str:
+        import re
         text = prompt.lower()
-        if "thời tiết" in text and "hà nội" in text:
-            return "Thought: Cần tra cứu thời tiết Hà Nội.\nAction: get_weather['Hà Nội']"
-        return "🤖 [Mock Provider]: Phản hồi giả lập offline cho bài test."
+        
+        # Nếu đang ở vòng lặp thứ 2 (đã có kết quả Observation từ Tool Execution)
+        if "observation:" in text:
+            return "Thought: Tôi đã thu thập đầy đủ thông tin dữ liệu từ CSDL SQLite để kết luận.\nFinal Answer: Dưới đây là thông tin tra cứu chi tiết từ hệ thống dành cho bạn."
+
+        # Tra cứu mã đơn hàng cụ thể (ORD-XXXX)
+        order_match = re.search(r"ord-\d+", text)
+        if order_match:
+            code = order_match.group(0).upper()
+            if "hủy" in text or "cancel" in text:
+                return f"Thought: Khách hàng muốn hủy đơn hàng {code}. Kích hoạt tool cancel_order.\nAction: cancel_order['{code}', 'Yêu cầu hủy từ khách hàng']"
+            elif any(kw in text for kw in ["đổi trả", "trả hàng", "tra hang", "doi tra", "ticket", "return", "hoàn tiền", "hoan tien"]):
+                return f"Thought: Khách hàng yêu cầu tạo ticket đổi trả cho đơn {code}. Dùng tool check_return_eligibility kiểm tra điều kiện 7 ngày trước.\nAction: check_return_eligibility['{code}']"
+            else:
+                return f"Thought: Truy vấn chi tiết đơn hàng {code} và vận chuyển trong CSDL.\nAction: get_order_details['{code}']"
+
+        if any(kw in text for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "xem đơn hàng", "tất cả đơn hàng"]):
+            return "Thought: Khách hàng yêu cầu xem danh sách tất cả đơn hàng. Gọi tool get_user_orders.\nAction: get_user_orders[1]"
+            
+        if any(kw in text for kw in ["sản phẩm", "mặt hàng", "tìm kiếm", "bán gì", "có gì"]):
+            return "Thought: Khách hàng yêu cầu xem/tìm kiếm danh mục sản phẩm. Gọi tool search_products.\nAction: search_products['%']"
+            
+        if any(kw in text for kw in ["admin", "doanh thu", "báo cáo", "thống kê"]):
+            return "Thought: Quản trị viên yêu cầu xem báo cáo tổng quan Admin. Gọi tool get_admin_dashboard_summary.\nAction: get_admin_dashboard_summary[3]"
+
+        return "Thought: Tiếp nhận câu hỏi và chào hỏi người dùng.\nFinal Answer: 👋 Xin chào! Tôi là Trợ lý AI E-Commerce (ReAct Agent Cấp 3). Bạn cần tôi hỗ trợ tra cứu đơn hàng, vận chuyển hay đổi trả sản phẩm gì hôm nay?"
 
 
 def get_llm_provider(provider_name: str = None) -> BaseLLMProvider:
