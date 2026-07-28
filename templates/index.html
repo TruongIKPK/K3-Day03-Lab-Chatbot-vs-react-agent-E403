@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShopEase AI - Hệ Thống Đăng Nhập, Tra Cứu & Quản Trị Admin</title>
+    <!-- Google Fonts Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.75);
+            --bg-card-border: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --secondary: #06b6d4;
+            --accent: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at top left, #1e1b4b, #0f172a 50%, #020617);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        /* SIDEBAR NAVIGATION */
+        .sidebar {
+            width: 280px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid var(--bg-card-border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 16px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 12px 24px 12px;
+            border-bottom: 1px solid var(--bg-card-border);
+        }
+
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .brand-text h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(to right, #fff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text span {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .nav-menu {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .nav-header {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            padding: 12px 12px 4px 12px;
+            font-weight: 700;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(6, 182, 212, 0.15));
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .nav-item i {
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .user-profile-badge {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            padding: 14px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: auto;
+        }
+
+        .avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981, #059669);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .user-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .user-info .name {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-info .role-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+
+        .logout-btn:hover {
+            color: var(--danger);
+        }
+
+        /* MAIN CONTENT AREA */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        /* TOP BAR */
+        .topbar {
+            height: 70px;
+            border-bottom: 1px solid var(--bg-card-border);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            position: sticky;
+            top: 0;
+            z-index: 90;
+        }
+
+        .page-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .auth-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 10px #34d399;
+        }
+
+        /* VIEW CONTAINER */
+        .view-container {
+            padding: 32px;
+            flex: 1;
+            display: none;
+        }
+
+        .view-container.active {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* CHAT VIEW (AI AGENT) */
+        .chat-layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+            height: calc(100vh - 134px);
+        }
+
+        .chat-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .msg-bubble {
+            max-width: 80%;
+            padding: 14px 18px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            line-height: 1.6;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-bubble.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+
+        .msg-bubble.assistant {
+            align-self: flex-start;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--bg-card-border);
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .chat-input-area input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            color: white;
+            padding: 0 24px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quick-prompts {
+            display: flex;
+            gap: 8px;
+            padding: 12px 20px;
+            background: rgba(15, 23, 42, 0.5);
+            overflow-x: auto;
+            border-top: 1px solid var(--bg-card-border);
+        }
+
+        .prompt-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .prompt-pill:hover {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            border-color: var(--primary);
+        }
+
+        /* TRACE LOG PANEL (RIGHT SIDE) */
+        .trace-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .trace-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .trace-step {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .trace-step-header {
+            font-weight: 600;
+            color: var(--warning);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .trace-thought {
+            color: #cbd5e1;
+            font-style: italic;
+        }
+
+        .trace-action {
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            padding: 6px 10px;
+            border-radius: var(--radius-sm);
+            font-family: monospace;
+            border: 1px dashed rgba(99, 102, 241, 0.4);
+        }
+
+        .trace-observation {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            padding: 6px 10px;
+            border-radius: var(--radius-sm);
+            font-family: monospace;
+        }
+
+        /* STATS & TABLES */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+
+        .stat-info .value {
+            font-size: 24px;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .stat-info .label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .data-table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .table-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--bg-card-border);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #cbd5e1;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-delivered { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .badge-pending { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .badge-shipping { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+        .badge-cancelled { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+        /* FORM STYLES */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            color: white;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--primary);
+        }
+
+        .btn-action {
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover { opacity: 0.9; }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: var(--radius-sm);
+        }
+
+        .btn-success { background: #10b981; }
+        .btn-danger { background: #ef4444; }
+
+        /* AUTH MODALS */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: #1e293b;
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-lg);
+            width: 420px;
+            padding: 32px;
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        .modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon"><i class="fa-solid fa-robot"></i></div>
+            <div class="brand-text">
+                <h1>ShopEase AI</h1>
+                <span>ReAct Agent Cấp 3</span>
+            </div>
+        </div>
+
+        <nav class="nav-menu">
+            <!-- Giao diện Khách hàng -->
+            <div class="nav-header">Khách Hàng (Customer Portal)</div>
+            <div class="nav-item active" onclick="switchView('chat')">
+                <i class="fa-solid fa-comments"></i> Tra Cứu AI Agent
+            </div>
+            <div class="nav-item" onclick="switchView('my-orders')">
+                <i class="fa-solid fa-box"></i> Đơn Hàng Của Tôi
+            </div>
+            <div class="nav-item" onclick="switchView('returns')">
+                <i class="fa-solid fa-rotate-left"></i> Yêu Cầu Đổi Trả
+            </div>
+            <div class="nav-item" onclick="switchView('catalog')">
+                <i class="fa-solid fa-store"></i> Cửa Hàng Sản Phẩm
+            </div>
+
+            <!-- Giao diện Quản trị viên (Hiện khi đăng nhập Admin) -->
+            <div class="nav-header admin-only" id="adminHeader" style="display:none;">Quản Trị Viên (Admin Portal)</div>
+            <div class="nav-item admin-only" id="navAdminDash" style="display:none;" onclick="switchView('admin-dashboard')">
+                <i class="fa-solid fa-chart-pie"></i> Báo Cáo Summary
+            </div>
+            <div class="nav-item admin-only" id="navAdminProd" style="display:none;" onclick="switchView('admin-products')">
+                <i class="fa-solid fa-plus-circle"></i> Quản Lý Sản Phẩm
+            </div>
+            <div class="nav-item admin-only" id="navAdminOrders" style="display:none;" onclick="switchView('admin-orders')">
+                <i class="fa-solid fa-tasks"></i> Quản Lý Đơn Hàng
+            </div>
+            <div class="nav-item admin-only" id="navAdminUsers" style="display:none;" onclick="switchView('admin-users')">
+                <i class="fa-solid fa-users"></i> Quản Lý Người Dùng
+            </div>
+        </nav>
+
+        <div class="user-profile-badge">
+            <div class="avatar" id="userAvatar">NV</div>
+            <div class="user-info">
+                <div class="name" id="userName">Nguyễn Văn A</div>
+                <div class="role-tag" id="userRoleTag">CUSTOMER</div>
+            </div>
+            <button class="logout-btn" onclick="openLoginModal()" title="Đổi tài khoản">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="page-title" id="pageTitle">Tra Cứu AI Agent & ReAct Trace</div>
+            <div class="topbar-actions">
+                <div class="status-pill">
+                    <div class="status-dot"></div>
+                    <span>SQLite Connected</span>
+                </div>
+                <button class="auth-btn" onclick="openLoginModal()">
+                    <i class="fa-solid fa-user-lock"></i>
+                    <span id="loginBtnText">Đăng Nhập / Đăng Ký</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW 1: CHAT AI AGENT & RE-ACT TRACE (USER & ADMIN) -->
+        <div class="view-container active" id="view-chat">
+            <div class="chat-layout">
+                <!-- Chat Window -->
+                <div class="chat-card">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="msg-bubble assistant">
+                            👋 Xin chào <span id="welcomeName">Nguyễn Văn A</span>!<br>
+                            Tôi là <strong>ShopEase AI Assistant (ReAct Agent Cấp 3)</strong>.<br>
+                            Tôi có thể giúp bạn <strong>Tra cứu thông tin đơn hàng</strong>, <strong>Theo dõi hành trình vận chuyển GHN/GHTK</strong> và <strong>Tự động kiểm tra chính sách & tạo đơn đổi trả 7 ngày</strong>!
+                        </div>
+                    </div>
+
+                    <div class="quick-prompts">
+                        <div class="prompt-pill" onclick="sendQuickPrompt('Kiểm tra đơn hàng ORD-8899 đang ở đâu và giao chưa?')">📦 Tra cứu đơn ORD-8899</div>
+                        <div class="prompt-pill" onclick="sendQuickPrompt('Tôi muốn đổi trả đơn ORD-8899 do bị móp hộp sản phẩm')">🔄 Đổi trả đơn ORD-8899</div>
+                        <div class="prompt-pill" onclick="sendQuickPrompt('Kiểm tra điều kiện đổi trả đơn ORD-1024')">⚠️ Kiểm tra bẫy ORD-1024 (Quá hạn)</div>
+                        <div class="prompt-pill" onclick="sendQuickPrompt('Tôi là Admin, cho tôi xem báo cáo tổng quan cửa hàng')">📊 Admin Summary Dashboard</div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <input type="text" id="userInput" placeholder="Nhập câu hỏi của bạn (Ví dụ: Tra cứu đơn ORD-8899)..." onkeypress="if(event.key==='Enter') sendMessage()">
+                        <button class="send-btn" onclick="sendMessage()">
+                            <span>Gửi</span> <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ReAct Trace Panel -->
+                <div class="trace-card">
+                    <div class="trace-title">
+                        <i class="fa-solid fa-brain"></i> ReAct Trace Logs
+                    </div>
+                    <div id="traceContainer" style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 40px;">
+                            Các bước suy luận <strong>Thought 🧠 -> Action 🛠️ -> Observation 👁️</strong> của ReAct Agent sẽ hiển thị thời gian thực tại đây.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: GIAO DIỆN USER - ĐƠN HÀNG CỦA TÔI -->
+        <div class="view-container" id="view-my-orders">
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">📦 Danh Sách Đơn Hàng Cá Nhân (User Portal)</div>
+                    <button class="btn-action btn-sm" onclick="loadMyOrders()"><i class="fa-solid fa-sync"></i> Tải lại</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mã Đơn</th>
+                            <th>Sản Phẩm Chi Tiết</th>
+                            <th>Tổng Tiền</th>
+                            <th>Thanh Toán</th>
+                            <th>Trạng Thái Đơn</th>
+                            <th>Ngày Tạo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="myOrdersTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW 3: GIAO DIỆN USER - ĐƠN ĐỔI TRẢ -->
+        <div class="view-container" id="view-returns">
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">🔄 Lịch Sử Yêu Cầu Đổi Trả Sản Phẩm</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mã Đổi Trả</th>
+                            <th>Mã Đơn Hàng</th>
+                            <th>Lý Do Đổi Trả</th>
+                            <th>Mô Tả Chi Tiết</th>
+                            <th>Trạng Thái Duyệt</th>
+                            <th>Thời Gian Gửi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="returnsTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW 4: CỬA HÀNG SẢN PHẨM -->
+        <div class="view-container" id="view-catalog">
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">🛍️ Danh Mục Sản Phẩm & Tồn Kho (Store Catalog)</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tên Sản Phẩm</th>
+                            <th>Giá Bán</th>
+                            <th>Số Lượng Kho</th>
+                            <th>Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="catalogTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW 5: GIAO DIỆN ADMIN - DASHBOARD SUMMARY -->
+        <div class="view-container" id="view-admin-dashboard">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;"><i class="fa-solid fa-shopping-bag"></i></div>
+                    <div class="stat-info">
+                        <div class="value" id="statOrders">3</div>
+                        <div class="label">Tổng Số Đơn Hàng</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d;"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                    <div class="stat-info">
+                        <div class="value" id="statPendingReturns">1</div>
+                        <div class="label">Đổi Trả Chờ Duyệt</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(6, 182, 212, 0.2); color: #67e8f9;"><i class="fa-solid fa-boxes-stacked"></i></div>
+                    <div class="stat-info">
+                        <div class="value" id="statProducts">4</div>
+                        <div class="label">Sản Phẩm Trong Kho</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7;"><i class="fa-solid fa-sack-dollar"></i></div>
+                    <div class="stat-info">
+                        <div class="value" id="statRevenue">5,640,000 VNĐ</div>
+                        <div class="label">Tổng Doanh Thu</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 6: GIAO DIỆN ADMIN - QUẢN LÝ SẢN PHẨM -->
+        <div class="view-container" id="view-admin-products">
+            <div class="data-table-card">
+                <div class="table-title" style="margin-bottom:16px;">➕ Thêm Sản Phẩm Mới Vào CSDL Kho (Admin Only)</div>
+                <form id="addProductForm" onsubmit="submitAddProduct(event)" class="form-grid">
+                    <div class="form-group">
+                        <label>Tên Sản Phẩm</label>
+                        <input type="text" id="pName" placeholder="Áo Sơ Mi Nam Công Sở..." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Danh Mục ID</label>
+                        <input type="number" id="pCategory" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Giá Bán (VNĐ)</label>
+                        <input type="number" id="pPrice" placeholder="450000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Số Lượng Tồn Kho</label>
+                        <input type="number" id="pStock" placeholder="100" required>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Mô Tả Sản Phẩm</label>
+                        <input type="text" id="pDesc" placeholder="Mô tả chất liệu, thiết kế...">
+                    </div>
+                    <button type="submit" class="btn-action" style="grid-column: span 2;">Lưu Sản Phẩm Mới (SQLite)</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- VIEW 7: GIAO DIỆN ADMIN - QUẢN LÝ TẤT CẢ ĐƠN HÀNG & DUYỆT ĐỔI TRẢ -->
+        <div class="view-container" id="view-admin-orders">
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">🔑 Phê Duyệt Yêu Cầu Đổi Trả (Admin Review)</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mã Đổi Trả</th>
+                            <th>Mã Đơn</th>
+                            <th>Khách Hàng</th>
+                            <th>Lý Do Đổi Trả</th>
+                            <th>Trạng Thái</th>
+                            <th>Hành Động Admin</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminReturnsTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW 8: GIAO DIỆN ADMIN - QUẢN LÝ NGƯỜI DÙNG -->
+        <div class="view-container" id="view-admin-users">
+            <div class="data-table-card">
+                <div class="table-header">
+                    <div class="table-title">👥 Danh Sách Người Dùng Trong SQLite (Users)</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Họ và Tên</th>
+                            <th>Email</th>
+                            <th>Số Điện Thoại</th>
+                            <th>Vai Trò (Role)</th>
+                            <th>Ngày Đăng Ký</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminUsersTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL ĐĂNG NHẬP & ĐĂNG KÝ -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeAuthModal()">&times;</button>
+            
+            <!-- Login Form -->
+            <div id="loginFormContainer">
+                <div class="modal-title">🔐 Đăng Nhập Hệ Thống</div>
+                <form onsubmit="handleLogin(event)" style="display:flex; flex-direction:column; gap:14px;">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="loginEmail" placeholder="nguyenvana@gmail.com hoặc admin@store.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mật Khẩu</label>
+                        <input type="password" id="loginPassword" placeholder="pass123 hoặc adminpass" required>
+                    </div>
+                    <button type="submit" class="btn-action" style="margin-top:10px;">Đăng Nhập</button>
+                </form>
+                <div style="text-align:center; margin-top:16px; font-size:13px; color:var(--text-muted);">
+                    Chưa có tài khoản? <a href="#" onclick="toggleAuthForm('register')" style="color:var(--primary); font-weight:600;">Đăng ký ngay</a>
+                </div>
+                <div style="margin-top:20px; padding:12px; background:rgba(255,255,255,0.05); border-radius:8px; font-size:11px; color:var(--text-muted);">
+                    💡 <strong>Tài khoản thử nghiệm sẵn:</strong><br>
+                    • Customer: <code>nguyenvana@gmail.com</code> / <code>pass123</code><br>
+                    • Admin: <code>admin@store.com</code> / <code>adminpass</code>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerFormContainer" style="display:none;">
+                <div class="modal-title">✨ Đăng Ký Tài Khoản Mới</div>
+                <form onsubmit="handleRegister(event)" style="display:flex; flex-direction:column; gap:12px;">
+                    <div class="form-group">
+                        <label>Họ và Tên</label>
+                        <input type="text" id="regName" placeholder="Nguyễn Văn A" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="regEmail" placeholder="user@gmail.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mật Khẩu</label>
+                        <input type="password" id="regPassword" placeholder="Mật khẩu bảo mật" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Số Điện Thoại</label>
+                        <input type="text" id="regPhone" placeholder="0987654321">
+                    </div>
+                    <div class="form-group">
+                        <label>Vai Trò Đăng Ký</label>
+                        <select id="regRole">
+                            <option value="CUSTOMER">Khách Hàng (Customer)</option>
+                            <option value="ADMIN">Quản Trị Viên (Admin)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-action" style="margin-top:10px;">Tạo Tài Khoản</button>
+                </form>
+                <div style="text-align:center; margin-top:16px; font-size:13px; color:var(--text-muted);">
+                    Đã có tài khoản? <a href="#" onclick="toggleAuthForm('login')" style="color:var(--primary); font-weight:600;">Đăng nhập</a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let currentUser = {
+            id: 1,
+            full_name: 'Nguyễn Văn A',
+            email: 'nguyenvana@gmail.com',
+            role: 'CUSTOMER'
+        };
+
+        function updateUIUser() {
+            document.getElementById('userName').innerText = currentUser.full_name;
+            document.getElementById('userAvatar').innerText = currentUser.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            document.getElementById('userRoleTag').innerText = currentUser.role;
+            document.getElementById('loginBtnText').innerText = currentUser.full_name;
+            document.getElementById('welcomeName').innerText = currentUser.full_name;
+
+            if (currentUser.role === 'ADMIN') {
+                document.getElementById('userRoleTag').style.background = 'rgba(239, 68, 68, 0.2)';
+                document.getElementById('userRoleTag').style.color = '#f87171';
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+            } else {
+                document.getElementById('userRoleTag').style.background = 'rgba(99, 102, 241, 0.2)';
+                document.getElementById('userRoleTag').style.color = '#a5b4fc';
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+            }
+        }
+
+        function openLoginModal() {
+            document.getElementById('authModal').classList.add('active');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.remove('active');
+        }
+
+        function toggleAuthForm(type) {
+            if (type === 'register') {
+                document.getElementById('loginFormContainer').style.display = 'none';
+                document.getElementById('registerFormContainer').style.display = 'block';
+            } else {
+                document.getElementById('loginFormContainer').style.display = 'block';
+                document.getElementById('registerFormContainer').style.display = 'none';
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, password: password })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    updateUIUser();
+                    closeAuthModal();
+                    alert(`✅ Xin chào ${currentUser.full_name} (${currentUser.role})!`);
+                    switchView('chat');
+                } else {
+                    alert(`❌ ${data.message}`);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối Server.');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const payload = {
+                full_name: document.getElementById('regName').value,
+                email: document.getElementById('regEmail').value,
+                password: document.getElementById('regPassword').value,
+                phone: document.getElementById('regPhone').value,
+                role: document.getElementById('regRole').value
+            };
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    updateUIUser();
+                    closeAuthModal();
+                    alert(`✅ Đăng ký thành công tài khoản ${currentUser.role}!`);
+                    switchView('chat');
+                } else {
+                    alert(`❌ ${data.message}`);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối Server.');
+            }
+        }
+
+        function switchView(viewName) {
+            document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            const targetView = document.getElementById('view-' + viewName);
+            if (targetView) targetView.classList.add('active');
+
+            if (viewName === 'chat') document.getElementById('pageTitle').innerText = 'Tra Cứu AI Agent & ReAct Trace';
+            else if (viewName === 'my-orders') { document.getElementById('pageTitle').innerText = 'Đơn Hàng Của Tôi'; loadMyOrders(); }
+            else if (viewName === 'returns') { document.getElementById('pageTitle').innerText = 'Yêu Cầu Đổi Trả'; loadReturns(); }
+            else if (viewName === 'catalog') { document.getElementById('pageTitle').innerText = 'Danh Mục Sản Phẩm'; loadCatalog(); }
+            else if (viewName === 'admin-dashboard') { document.getElementById('pageTitle').innerText = 'Admin Dashboard Summary'; loadAdminStats(); }
+            else if (viewName === 'admin-products') { document.getElementById('pageTitle').innerText = 'Admin Quản Lý Sản Phẩm'; }
+            else if (viewName === 'admin-orders') { document.getElementById('pageTitle').innerText = 'Admin Duyệt Đổi Trả'; loadAdminReturns(); }
+            else if (viewName === 'admin-users') { document.getElementById('pageTitle').innerText = 'Admin Quản Lý Người Dùng'; loadAdminUsers(); }
+        }
+
+        function sendQuickPrompt(promptText) {
+            document.getElementById('userInput').value = promptText;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const inputEl = document.getElementById('userInput');
+            const query = inputEl.value.trim();
+            if (!query) return;
+
+            const chatMessages = document.getElementById('chatMessages');
+            
+            chatMessages.innerHTML += `<div class="msg-bubble user">${query}</div>`;
+            inputEl.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            const traceContainer = document.getElementById('traceContainer');
+            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang suy luận và truy vấn SQLite cho ${currentUser.role}...</div></div>`;
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role })
+                });
+
+                const data = await res.json();
+
+                chatMessages.innerHTML += `<div class="msg-bubble assistant">${data.response}</div>`;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                if (data.trace && data.trace.length > 0) {
+                    traceContainer.innerHTML = '';
+                    data.trace.forEach((step, idx) => {
+                        traceContainer.innerHTML += `
+                            <div class="trace-step">
+                                <div class="trace-step-header">
+                                    <span>Step ${idx + 1} (${currentUser.role})</span>
+                                    <span>ReAct Loop</span>
+                                </div>
+                                <div class="trace-thought">🧠 ${step.thought}</div>
+                                ${step.action ? `<div class="trace-action">🛠️ Action: ${step.action}</div>` : ''}
+                                ${step.observation ? `<div class="trace-observation">👁️ Obs: ${step.observation}</div>` : ''}
+                            </div>
+                        `;
+                    });
+                }
+            } catch (err) {
+                chatMessages.innerHTML += `<div class="msg-bubble assistant" style="color:#ef4444;">Lỗi kết nối Server: ${err.message}</div>`;
+            }
+        }
+
+        async function loadMyOrders() {
+            const res = await fetch(`/api/orders?user_id=${currentUser.id}`);
+            const data = await res.json();
+            const tbody = document.getElementById('myOrdersTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.orders && data.orders.length > 0) {
+                data.orders.forEach(o => {
+                    const badgeClass = o.status === 'DELIVERED' ? 'badge-delivered' : o.status === 'PENDING' ? 'badge-pending' : 'badge-shipping';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${o.order_code}</strong></td>
+                            <td>${o.items}</td>
+                            <td>${o.total_amount.toLocaleString()} VNĐ</td>
+                            <td>${o.payment_method}</td>
+                            <td><span class="badge ${badgeClass}">${o.status}</span></td>
+                            <td>${o.created_at}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Không tìm thấy đơn hàng nào.</td></tr>`;
+            }
+        }
+
+        async function loadReturns() {
+            const res = await fetch('/api/returns');
+            const data = await res.json();
+            const tbody = document.getElementById('returnsTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.returns && data.returns.length > 0) {
+                data.returns.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${r.return_code}</strong></td>
+                            <td>${r.order_code}</td>
+                            <td>${r.reason}</td>
+                            <td>${r.description}</td>
+                            <td><span class="badge badge-pending">${r.status}</span></td>
+                            <td>${r.created_at}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Chưa có yêu cầu đổi trả nào.</td></tr>`;
+            }
+        }
+
+        async function loadCatalog() {
+            const res = await fetch('/api/products');
+            const data = await res.json();
+            const tbody = document.getElementById('catalogTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.products && data.products.length > 0) {
+                data.products.forEach(p => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${p.id}</td>
+                            <td><strong>${p.name}</strong></td>
+                            <td>${p.price.toLocaleString()} VNĐ</td>
+                            <td>${p.stock} cái</td>
+                            <td><span class="badge ${p.stock > 0 ? 'badge-delivered' : 'badge-cancelled'}">${p.status}</span></td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        async function loadAdminStats() {
+            const res = await fetch(`/api/admin/dashboard?admin_id=${currentUser.id}`);
+            const data = await res.json();
+            document.getElementById('statOrders').innerText = data.total_orders || 0;
+            document.getElementById('statPendingReturns').innerText = data.pending_returns || 0;
+            document.getElementById('statProducts').innerText = data.total_products || 0;
+            document.getElementById('statRevenue').innerText = (data.revenue || 0).toLocaleString() + ' VNĐ';
+        }
+
+        async function submitAddProduct(e) {
+            e.preventDefault();
+            const payload = {
+                admin_id: currentUser.id,
+                name: document.getElementById('pName').value,
+                category_id: document.getElementById('pCategory').value,
+                price: document.getElementById('pPrice').value,
+                stock: document.getElementById('pStock').value,
+                description: document.getElementById('pDesc').value
+            };
+
+            const res = await fetch('/api/admin/product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await res.json();
+            alert(result.message);
+            switchView('catalog');
+        }
+
+        async function loadAdminReturns() {
+            const res = await fetch('/api/returns');
+            const data = await res.json();
+            const tbody = document.getElementById('adminReturnsTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.returns && data.returns.length > 0) {
+                data.returns.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${r.return_code}</strong></td>
+                            <td>${r.order_code}</td>
+                            <td>${r.user_name || 'User #' + r.user_id}</td>
+                            <td>${r.reason} (${r.description})</td>
+                            <td><span class="badge badge-pending">${r.status}</span></td>
+                            <td>
+                                <button class="btn-action btn-sm btn-success" onclick="reviewReturn('${r.return_code}', 'APPROVE')">Duyệt (Approve)</button>
+                                <button class="btn-action btn-sm btn-danger" onclick="reviewReturn('${r.return_code}', 'REJECT')">Từ Chối</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        async function reviewReturn(code, action) {
+            const res = await fetch('/api/admin/review-return', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUser.id, return_code: code, action: action, note: 'Duyệt từ Web App Admin' })
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            loadAdminReturns();
+        }
+
+        async function loadAdminUsers() {
+            const res = await fetch('/api/users');
+            const data = await res.json();
+            const tbody = document.getElementById('adminUsersTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.users && data.users.length > 0) {
+                data.users.forEach(u => {
+                    const badgeClass = u.role === 'ADMIN' ? 'badge-cancelled' : 'badge-delivered';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${u.id}</td>
+                            <td><strong>${u.full_name}</strong></td>
+                            <td>${u.email}</td>
+                            <td>${u.phone || 'Chưa cập nhật'}</td>
+                            <td><span class="badge ${badgeClass}">${u.role}</span></td>
+                            <td>${u.created_at}</td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        // Initialize UI
+        updateUIUser();
+    </script>
+</body>
+</html>

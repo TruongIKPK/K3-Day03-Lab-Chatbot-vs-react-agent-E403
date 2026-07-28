@@ -2,31 +2,37 @@
   {
     "id": 1,
     "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Thủ đô của Việt Nam là gì?",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "question": "Chính sách đổi trả hàng của cửa hàng quy định thời hạn bao nhiêu ngày?",
+    "expected_behavior": "Chatbot hoặc Agent trả lời trực tiếp thời hạn đổi trả là 7 ngày kể từ ngày nhận hàng thành công."
   },
   {
     "id": 2,
     "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Nêu 3 lời khuyên để học tốt lập trình.",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "question": "Xin chào, bạn có thể giúp tôi làm những việc gì?",
+    "expected_behavior": "Chatbot giới thiệu khả năng tra cứu đơn hàng, vận chuyển và gửi yêu cầu đổi trả cho khách hàng, cũng như công cụ quản trị sản phẩm cho Admin."
   },
   {
     "id": 3,
-    "category": "🟡 Multi-step (Cần Tool)",
-    "question": "Thời tiết ở Hà Nội hôm nay thế nào và tôi nên mặc gì đi chơi?",
-    "expected_behavior": "Agent gọi tool get_weather('Hà Nội') rồi suy luận trang phục."
+    "category": "🟡 Multi-step (Cần Tool tra cứu)",
+    "question": "Kiểm tra giúp tôi đơn hàng ORD-8899 đang ở đâu và đã giao chưa?",
+    "expected_behavior": "Agent gọi tool get_order_details('ORD-8899') và get_shipping_status('ORD-8899') để trả lời chính xác."
   },
   {
     "id": 4,
-    "category": "🟡 Multi-step (Cần gọi 2 Tools)",
-    "question": "Kiểm tra vé máy bay từ TP.HCM đi Hà Nội ngày mai và dự báo thời tiết ở Hà Nội.",
-    "expected_behavior": "Agent gọi tool search_flights và get_weather để trả lời đầy đủ."
+    "category": "🟡 Multi-step (Cần 2 Tools tra cứu + Đổi trả)",
+    "question": "Tôi muốn đổi trả đơn hàng ORD-8899 do sản phẩm bị lỗi móp hộp, kiểm tra giúp tôi xem có đổi trả được không?",
+    "expected_behavior": "Agent gọi tool check_return_eligibility('ORD-8899'), xác nhận đủ điều kiện và gọi create_return_request."
   },
   {
     "id": 5,
-    "category": "🔴 Edge Case (Bẫy Guardrail)",
-    "question": "Tra cứu thời tiết ở thành phố Atlantis ngày 32/13/2026.",
-    "expected_behavior": "Tool báo lỗi tham số/thất bại, Guardrail ngắt sau 3 bước và trả về thông báo lịch sự."
+    "category": "🔴 Edge Case (Bẫy Guardrail & Đơn quá hạn)",
+    "question": "Tôi muốn yêu cầu đổi trả đơn hàng ORD-1024 vừa đặt.",
+    "expected_behavior": "Agent gọi tool check_return_eligibility('ORD-1024'), phát hiện đơn đã giao 15 ngày (quá hạn 7 ngày), ngắt lặp an toàn và từ chối đổi trả."
+  },
+  {
+    "id": 6,
+    "category": "🔑 Admin Tool (Quyền Quản Trị Viên)",
+    "question": "Tôi là Admin (ID: 3), hãy xem báo cáo thống kê tổng quan cửa hàng và thêm sản phẩm mới Áo Sơ Mi Nam giá 450,000 VNĐ, số lượng kho 100 cái.",
+    "expected_behavior": "Agent xác thực quyền Admin (user_id = 3), gọi tool get_admin_dashboard_summary và add_product để tạo sản phẩm mới vào SQLite."
   }
 ]
