@@ -28,58 +28,58 @@ def _verify_admin(conn, admin_id: int) -> bool:
 # --- GROUP 1: APIS ĐƠN HÀNG & SẢN PHẨM (CUSTOMER) ---
 
 def create_order(user_id: int, product_id: int, quantity: int = 1, payment_method: str = "COD", shipping_address: str = "123 Nguyễn Huệ, Quận 1, TP.HCM") -> str:
-    """Khách hàng: Khởi tạo đơn hàng mới và giả lập thanh toán trong CSDL SQLite."""
+    
     """
-Create a new order and simulate payment in the SQLite database.
+    Create a new order and simulate payment in the SQLite database.
 
-Business Flow:
-    - Validate product exists.
-    - Validate inventory.
-    - Create order.
-    - Create order items.
-    - Update product stock.
-    - Create shipping record.
+    Business Flow:
+        - Validate product exists.
+        - Validate inventory.
+        - Create order.
+        - Create order items.
+        - Update product stock.
+        - Create shipping record.
 
-Args:
-    user_id (int):
-        Customer ID.
+    Args:
+        user_id (int):
+            Customer ID.
 
-    product_id (int):
-        Product ID.
+        product_id (int):
+            Product ID.
 
-    quantity (int, optional):
-        Quantity to purchase.
-        Default = 1.
+        quantity (int, optional):
+            Quantity to purchase.
+            Default = 1.
 
-    payment_method (str, optional):
-        Payment method.
-        Example:
-            "COD"
-            "BANK"
+        payment_method (str, optional):
+            Payment method.
+            Example:
+                "COD"
+                "BANK"
 
-    shipping_address (str, optional):
-        Delivery address.
+        shipping_address (str, optional):
+            Delivery address.
 
-Returns:
-    str:
-        Success:
-            Human-readable order confirmation.
+    Returns:
+        str:
+            Success:
+                Human-readable order confirmation.
 
-        Failure:
-            Product not found.
-            Out of stock.
-            SQLite execution error.
+            Failure:
+                Product not found.
+                Out of stock.
+                SQLite execution error.
 
-Database:
-    - products
-    - orders
-    - order_items
-    - shipping
+    Database:
+        - products
+        - orders
+        - order_items
+        - shipping
 
-Error Contract:
-    Never raises exceptions.
-    Always returns a readable string.
-"""
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -136,7 +136,6 @@ Error Contract:
 
 
 def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
-    """Tra cứu danh sách đơn hàng của khách hàng theo user_id trong SQLite."""
     """
 Retrieve all orders of a customer.
 
@@ -275,7 +274,6 @@ def get_order_details(order_code: str) -> str:
         return f"LỖI: {e}"
 
 def cancel_order(order_code: str, reason: str = "Đổi ý không mua nữa") -> str:
-    """Hủy đơn hàng nếu đơn ở trạng thái PENDING hoặc CONFIRMED."""
     """
 Cancel an order if it is still cancellable.
 
@@ -326,7 +324,6 @@ Error Contract:
 
 
 def search_products(keyword: str) -> str:
-    """Tra cứu thông tin sản phẩm trong CSDL SQLite."""
     """
 Search products by keyword.
 
@@ -522,7 +519,6 @@ def check_return_eligibility(order_code: str) -> str:
         return f"LỖI: {e}"
     
 def create_return_request(order_code: str, reason: str = "DEFECTIVE", description: str = "Khách hàng đổi trả") -> str:
-    """Khởi tạo đơn đổi trả trong bảng return_requests SQLite."""
     """
 Create a return request for an eligible order.
 
@@ -596,7 +592,6 @@ Error Contract:
 
 
 def get_return_request_status(order_code: str) -> str:
-    """Tra cứu tiến độ đơn đổi trả trong SQLite."""
     """
 Retrieve return request information.
 
@@ -639,7 +634,6 @@ Error Contract:
 
 
 def cancel_return_request(return_id: str) -> str:
-    """Hủy đơn đổi trả nếu ở trạng thái REQUESTED."""
     """
 Cancel a return request.
 
@@ -686,7 +680,6 @@ Error Contract:
 
 
 def get_user_profile(user_id: int = 1) -> str:
-    """Tra cứu thông tin tài khoản người dùng từ bảng users SQLite."""
     """
 Retrieve customer profile information.
 
@@ -722,7 +715,6 @@ Error Contract:
 # --- GROUP 5: APIS QUẢN TRỊ VIÊN (ADMIN TOOLS) ---
 
 def add_product(admin_id: int, name: str, category_id: int, price: float, stock: int, description: str = "Sản phẩm mới") -> str:
-    """Admin: Thêm sản phẩm mới vào danh mục sản phẩm trong SQLite."""
     """
 Add a new product to the catalog.
 
@@ -781,7 +773,6 @@ Error Contract:
 
 
 def update_product_stock(admin_id: int, product_id: int, new_stock: int) -> str:
-    """Admin: Cập nhật số lượng tồn kho sản phẩm trong CSDL SQLite."""
     """
 Update product inventory.
 
@@ -831,7 +822,7 @@ Error Contract:
 
 
 def update_order_status(admin_id: int, order_code: str, new_status: str) -> str:
-    """Admin: Cập nhật trạng thái đơn hàng trong SQLite (PENDING, CONFIRMED, PACKING, SHIPPING, DELIVERED, CANCELLED)."""
+
     """
 Update order status.
 
@@ -887,7 +878,6 @@ Error Contract:
 
 
 def review_return_request(admin_id: int, return_code: str, action: str, note: str = "Đã xem xét") -> str:
-    """Admin: Duyệt (APPROVED) hoặc Từ chối (REJECTED) đơn đổi trả từ khách hàng."""
     """
 Approve or reject a return request.
 
@@ -965,7 +955,6 @@ Error Contract:
 
 
 def get_admin_dashboard_summary(admin_id: int = 3) -> str:
-    """Admin: Xem báo cáo thống kê tổng quan (Đơn hàng, Đổi trả chờ duyệt, Sản phẩm, Doanh thu)."""
     """
 Retrieve dashboard statistics for administrators.
 
