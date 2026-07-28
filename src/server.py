@@ -11,15 +11,27 @@ from flask import Flask, render_template, request, jsonify
 # Thêm đường dẫn src vào sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from db import get_connection, init_db
+from db import (
+    get_connection,
+    init_db,
+    get_or_create_session,
+    save_chat_message,
+    get_chat_history,
+    extract_order_code_from_history
+)
 from tools import (
     AVAILABLE_TOOLS,
     create_order,
     get_user_orders,
     get_order_details,
+    cancel_order,
+    search_products,
     get_shipping_status,
     check_return_eligibility,
     create_return_request,
+    cancel_return_request,
+    get_return_request_status,
+    get_user_profile,
     add_product,
     update_product_stock,
     update_order_status,
@@ -27,7 +39,7 @@ from tools import (
     get_admin_dashboard_summary
 )
 from providers import get_llm_provider
-from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT
+from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT, check_guardrails
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
@@ -255,28 +267,98 @@ def api_admin_dashboard():
     })
 
 
+@app.route("/api/orders/cancel", methods=["POST"])
+def api_cancel_order():
+    """Khách hàng hủy đơn hàng (PENDING hoặc CONFIRMED)"""
+    data = request.json or {}
+    order_code = data.get("order_code", "").strip()
+    reason = data.get("reason", "Khách hàng hủy từ Web App")
+    if not order_code:
+        return jsonify({"success": False, "message": "Vui lòng cung cấp mã đơn hàng cần hủy."})
+    msg = cancel_order(order_code, reason)
+    success = "HỦY ĐƠN THÀNH CÔNG" in msg
+    return jsonify({"success": success, "message": msg})
+
+
+@app.route("/api/returns/cancel", methods=["POST"])
+def api_cancel_return():
+    """Khách hàng hủy yêu cầu đổi trả đang chờ duyệt"""
+    data = request.json or {}
+    return_id = data.get("return_id", "").strip()
+    if not return_id:
+        return jsonify({"success": False, "message": "Vui lòng cung cấp mã yêu cầu đổi trả."})
+    msg = cancel_return_request(return_id)
+    success = "ĐÃ HỦY" in msg
+    return jsonify({"success": success, "message": msg})
+
+
+@app.route("/api/users/profile", methods=["GET"])
+def api_user_profile():
+    """Tra cứu thông tin cá nhân khách hàng"""
+    user_id = request.args.get("user_id", 1, type=int)
+    profile_info = get_user_profile(user_id)
+    return jsonify({"success": True, "profile": profile_info})
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    """Xử lý tin nhắn từ FE với ReAct Agent Loop & Trích xuất Trace Log"""
+    """Xử lý tin nhắn từ FE với ReAct Agent Loop, Bộ Nhớ Context Session & Trích xuất Trace Log"""
     data = request.json or {}
     user_query = data.get("query", "")
     user_id = data.get("user_id", 1)
     user_role = data.get("role", "CUSTOMER")
+    input_session_id = data.get("session_id")
     
     if not user_query:
-        return jsonify({"response": "Vui lòng nhập câu hỏi.", "trace": []})
+        return jsonify({"response": "Vui lòng nhập câu hỏi.", "trace": [], "session_id": input_session_id})
+
+    # Lấy hoặc tạo phiên thoại hội thoại
+    session_id = get_or_create_session(user_id, input_session_id)
 
     provider = get_llm_provider()
     trace_steps = []
     
-    # Trích xuất mã đơn hàng nếu có
+    # 1. Kiểm tra Phanh Guardrails (Chống tấn công ngoài phạm vi & vượt quyền)
+    guard = check_guardrails(user_query, user_role)
+    if not guard["safe"]:
+        trace_steps.append({
+            "thought": f"Phát hiện tin nhắn ngoài phạm vi hoặc vi phạm an toàn ({guard['type']}). Kích hoạt Phanh Scope Guardrail.",
+            "action": "scope_guardrail_block",
+            "observation": "Blocked by Scope Policy"
+        })
+        save_chat_message(session_id, "USER", user_query)
+        save_chat_message(session_id, "ASSISTANT", guard["reason"])
+        return jsonify({"response": guard["reason"], "trace": trace_steps, "session_id": session_id})
+
+    # Trích xuất mã đơn hàng từ câu hỏi hiện tại HOẶC truy tìm từ bộ nhớ hội thoại trước đó
     order_match = re.search(r"ORD-\d+", user_query.upper())
     code = order_match.group(0) if order_match else None
     
-    if "đổi trả" in user_query.lower() and code:
+    if not code:
+        code_from_memory = extract_order_code_from_history(session_id)
+        if code_from_memory:
+            code = code_from_memory
+            trace_steps.append({
+                "thought": f"🧠 Tái tạo ngữ cảnh bộ nhớ (Session #{session_id}): Nhớ mã đơn hàng {code} từ tin nhắn trước.",
+                "action": f"memory_recall['{code}']",
+                "observation": f"Recalled {code} from context"
+            })
+    
+    query_lower = user_query.lower()
+    
+    if ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower) and code:
+        res = cancel_order(code, "Yêu cầu từ AI Chatbot")
+        trace_steps.append({
+            "thought": f"Khách hàng muốn hủy đơn hàng {code} (Từ ngữ cảnh hội thoại). Kích hoạt tool cancel_order.",
+            "action": f"cancel_order['{code}', 'Yêu cầu từ AI Chatbot']",
+            "observation": res
+        })
+        final_res = f"📝 Thông báo xử lý hủy đơn <strong>{code}</strong>:<br>{res}"
+
+    elif "đổi trả" in query_lower and code:
         eligibility = check_return_eligibility(code)
         trace_steps.append({
-            "thought": f"Khách hàng hỏi đổi trả đơn {code}. Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
+            "thought": f"Khách hàng hỏi đổi trả đơn {code} (Từ ngữ cảnh hội thoại). Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
             "action": f"check_return_eligibility['{code}']",
             "observation": eligibility
         })
@@ -292,7 +374,7 @@ def api_chat():
         else:
             final_res = f"⚠️ Không thể khởi tạo đổi trả:<br>{eligibility}"
             
-    elif ("kiểm tra" in user_query.lower() or "trạng thái" in user_query.lower()) and code:
+    elif ("kiểm tra" in query_lower or "trạng thái" in query_lower or "giao chưa" in query_lower) and code:
         details = get_order_details(code)
         shipping = get_shipping_status(code)
         trace_steps.append({
@@ -307,7 +389,40 @@ def api_chat():
         })
         final_res = f"📦 Thông tin đơn hàng <strong>{code}</strong>:<br><pre style='font-family:sans-serif;'>{details}\n\n{shipping}</pre>"
         
-    elif "admin" in user_query.lower() or "thống kê" in user_query.lower() or "doanh thu" in user_query.lower():
+    elif any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "bao nhiêu đơn", "xem đơn hàng", "đơn hàng hiện có", "tất cả đơn hàng", "my orders", "lịch sử đơn hàng", "lịch sử mua hàng", "đã đặt bao nhiêu", "tôi đã mua"]):
+        orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
+        trace_steps.append({
+            "thought": f"Khách hàng yêu cầu xem danh sách tất cả đơn hàng. Gọi tool get_user_orders[{user_id}].",
+            "action": f"get_user_orders[{user_id}, 'ALL']",
+            "observation": orders_result
+        })
+        # Đếm số đơn hàng
+        order_lines = [line for line in orders_result.split("\n") if line.strip().startswith("- ORD-")]
+        count = len(order_lines)
+        if count > 0:
+            final_res = (
+                f"📋 <strong>Danh sách đơn hàng của bạn ({count} đơn):</strong><br>"
+                f"<pre style='font-family:sans-serif;'>{orders_result}</pre>"
+            )
+        else:
+            final_res = "📭 Bạn hiện chưa có đơn hàng nào trong hệ thống. Hãy khám phá sản phẩm và đặt hàng ngay nhé!"
+
+    elif any(kw in query_lower for kw in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]):
+        # Trích xuất keyword tìm kiếm từ câu hỏi
+        search_keyword = query_lower
+        for prefix in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]:
+            search_keyword = search_keyword.replace(prefix, "").strip()
+        if not search_keyword or len(search_keyword) < 2:
+            search_keyword = "%"  # Tìm tất cả nếu không có keyword cụ thể
+        products_result = search_products(search_keyword)
+        trace_steps.append({
+            "thought": f"Khách hàng tìm kiếm sản phẩm với từ khóa '{search_keyword}'. Gọi tool search_products.",
+            "action": f"search_products['{search_keyword}']",
+            "observation": products_result
+        })
+        final_res = f"🛒 <strong>Kết quả tìm kiếm:</strong><br><pre style='font-family:sans-serif;'>{products_result}</pre>"
+
+    elif "admin" in query_lower or "thống kê" in query_lower or "doanh thu" in query_lower:
         if user_role == "ADMIN":
             summary = get_admin_dashboard_summary(user_id)
             trace_steps.append({
@@ -324,15 +439,24 @@ def api_chat():
             })
             final_res = "🚫 TỪ CHỐI TRUY CẬP: Tài khoản của bạn không có quyền xem thông tin Admin."
     else:
-        llm_out = provider.generate(user_query, system_prompt=REACT_SYSTEM_PROMPT)
+        # Lấy lịch sử hội thoại 6 tin gần đây để làm Context cho LLM
+        history_msgs = get_chat_history(session_id, limit=6)
+        history_text = "\n".join([f"{m['role']}: {m['message']}" for m in history_msgs])
+        context_prompt = f"Lịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}" if history_text else user_query
+
+        llm_out = provider.generate(context_prompt, system_prompt=REACT_SYSTEM_PROMPT)
         trace_steps.append({
-            "thought": "Sinh phản hồi qua ReAct LLM Engine.",
-            "action": "generate_response",
+            "thought": "Sinh phản hồi qua ReAct LLM Engine kết hợp bộ nhớ lịch sử hội thoại.",
+            "action": "generate_response_with_memory",
             "observation": "Success"
         })
         final_res = llm_out
 
-    return jsonify({"response": final_res, "trace": trace_steps})
+    # Lưu tin nhắn vào CSDL SQLite cho bộ nhớ phiên thoại
+    save_chat_message(session_id, "USER", user_query)
+    save_chat_message(session_id, "ASSISTANT", final_res)
+
+    return jsonify({"response": final_res, "trace": trace_steps, "session_id": session_id})
 
 
 @app.route("/api/admin/product", methods=["POST"])

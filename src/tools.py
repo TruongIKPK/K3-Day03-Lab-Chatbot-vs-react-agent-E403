@@ -84,7 +84,6 @@ Error Contract:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # 1. Kiểm tra sản phẩm
         cursor.execute("SELECT id, name, price, stock, status FROM products WHERE id = ?;", (int(product_id),))
         p = cursor.fetchone()
         if not p:
@@ -99,7 +98,6 @@ Error Contract:
         total_amount = unit_price * int(quantity) + 30000  # Phí ship 30,000 VNĐ
         order_code = f"ORD-{random.randint(1000, 9999)}"
         
-        # 2. Thêm bản ghi đơn hàng orders
         cursor.execute("""
             INSERT INTO orders (user_id, order_code, total_amount, shipping_fee, status, payment_method, shipping_address)
             VALUES (?, ?, ?, 30000, 'CONFIRMED', ?, ?);
@@ -107,18 +105,15 @@ Error Contract:
         
         order_id = cursor.lastrowid
         
-        # 3. Thêm chi tiết đơn order_items
         cursor.execute("""
             INSERT INTO order_items (order_id, product_id, quantity, unit_price)
             VALUES (?, ?, ?, ?);
         """, (order_id, int(product_id), int(quantity), unit_price))
         
-        # 4. Trừ số lượng tồn kho product stock
         new_stock = p["stock"] - int(quantity)
         new_status = "ACTIVE" if new_stock > 0 else "OUT_OF_STOCK"
         cursor.execute("UPDATE products SET stock = ?, status = ? WHERE id = ?;", (new_stock, new_status, int(product_id)))
         
-        # 5. Tạo vận chuyển shipping
         tracking_num = f"GHN{random.randint(100000, 999999)}"
         cursor.execute("""
             INSERT INTO shipping (order_id, carrier, tracking_number, status)
@@ -571,7 +566,14 @@ Error Contract:
             conn.close()
             return f"LỖI: Không tìm thấy đơn hàng '{code}'."
             
-        ret_code = f"RET-{datetime.now().strftime('%M%S')}"
+        # Kiểm tra xem đơn hàng đã có yêu cầu đổi trả nào đang hoạt động chưa
+        cursor.execute("SELECT return_code, status FROM return_requests WHERE order_id = ? AND status NOT IN ('CANCELLED', 'REJECTED');", (o["id"],))
+        existing_ret = cursor.fetchone()
+        if existing_ret:
+            conn.close()
+            return f"⚠️ ĐƠN HÀNG ĐÃ CÓ ĐƠN ĐỔI TRẢ: Mã đổi trả '{existing_ret['return_code']}' đang ở trạng thái {existing_ret['status']}."
+
+        ret_code = f"RET-{random.randint(1000, 9999)}"
         valid_reason = reason.upper() if reason.upper() in ['DEFECTIVE', 'WRONG_ITEM', 'DAMAGED', 'MIND_CHANGE'] else 'DEFECTIVE'
         
         cursor.execute("""
@@ -671,7 +673,7 @@ Error Contract:
             conn.close()
             return f"LỖI: Không tìm thấy mã yêu cầu đổi trả '{return_id}'."
             
-        if r["status"] == "REQUESTED":
+        if r["status"] in ["REQUESTED", "REVIEWING"]:
             cursor.execute("UPDATE return_requests SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE return_code = ?;", (rid,))
             conn.commit()
             conn.close()
@@ -931,14 +933,33 @@ Error Contract:
             return f"🚫 TỪ CHỐI QUYỀN: User #{admin_id} không có quyền ADMIN."
             
         cursor = conn.cursor()
-        cursor.execute("UPDATE return_requests SET status = ?, description = description || ' | Admin Note: ' || ?, updated_at = CURRENT_TIMESTAMP WHERE return_code = ?;", (target_status, note, rcode))
-        if cursor.rowcount == 0:
+        
+        # 1. Kiểm tra trạng thái hiện tại của đơn đổi trả
+        cursor.execute("SELECT status, description FROM return_requests WHERE return_code = ?;", (rcode,))
+        r = cursor.fetchone()
+        if not r:
             conn.close()
             return f"LỖI: Không tìm thấy mã yêu cầu đổi trả '{rcode}'."
             
+        current_status = r["status"]
+        if current_status in ["APPROVED", "REJECTED", "COMPLETED", "CANCELLED"]:
+            conn.close()
+            return f"❌ ĐƠN ĐÃ ĐƯỢC XỬ LÝ: Yêu cầu đổi trả '{rcode}' đã ở trạng thái '{current_status}', không thể xử lý lại."
+            
+        # 2. Xóa các ghi chú cũ nếu có để tránh bị lặp chuỗi "Admin Note: ..."
+        orig_desc = r["description"] or ""
+        base_desc = orig_desc.split(" | Admin Note:")[0]
+        new_desc = f"{base_desc} | Admin Note: {note}"
+        
+        cursor.execute("""
+            UPDATE return_requests 
+            SET status = ?, description = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE return_code = ?;
+        """, (target_status, new_desc, rcode))
+        
         conn.commit()
         conn.close()
-        return f"✅ DUYỆT ĐỔI TRẢ THÀNH CÔNG (ADMIN)! Yêu cầu '{rcode}' đã chuyển sang trạng thái '{target_status}'. Ghi chú: {note}."
+        return f"✅ DUYỆT ĐỔI TRẢ THÀNH CÔNG (ADMIN)! Yêu cầu '{rcode}' đã chuyển sang trạng thái '{target_status}'."
     except Exception as e:
         return f"LỖI THỰC THI SQLITE (review_return_request): {str(e)}"
 

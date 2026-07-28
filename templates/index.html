@@ -1320,6 +1320,8 @@
             sendMessage();
         }
 
+        let currentSessionId = null;
+
         async function sendMessage() {
             const inputEl = document.getElementById('userInput');
             const query = inputEl.value.trim();
@@ -1332,16 +1334,19 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             const traceContainer = document.getElementById('traceContainer');
-            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang suy luận và truy vấn SQLite cho ${currentUser.role}...</div></div>`;
+            traceContainer.innerHTML = `<div class="trace-step"><div class="trace-thought">🧠 Agent đang truy xuất bộ nhớ context và suy luận cho ${currentUser.role}...</div></div>`;
 
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role })
+                    body: JSON.stringify({ query: query, user_id: currentUser.id, role: currentUser.role, session_id: currentSessionId })
                 });
 
                 const data = await res.json();
+                if (data.session_id) {
+                    currentSessionId = data.session_id;
+                }
 
                 chatMessages.innerHTML += `<div class="msg-bubble assistant">${data.response}</div>`;
                 chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1483,20 +1488,31 @@
             
             if (data.returns && data.returns.length > 0) {
                 data.returns.forEach(r => {
+                    let actionHtml = '';
+                    if (r.status === 'REQUESTED' || r.status === 'REVIEWING') {
+                        actionHtml = `
+                            <button class="btn-action btn-sm btn-success" onclick="reviewReturn('${r.return_code}', 'APPROVE')">Duyệt (Approve)</button>
+                            <button class="btn-action btn-sm btn-danger" onclick="reviewReturn('${r.return_code}', 'REJECT')">Từ Chối</button>
+                        `;
+                    } else {
+                        actionHtml = `<span style="font-size:12px; color:var(--text-muted); font-style:italic;">Đã xử lý (${r.status})</span>`;
+                    }
+
+                    const badgeClass = r.status === 'APPROVED' ? 'badge-delivered' : r.status === 'REJECTED' ? 'badge-cancelled' : 'badge-pending';
+
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${r.return_code}</strong></td>
                             <td>${r.order_code}</td>
                             <td>${r.user_name || 'User #' + r.user_id}</td>
                             <td>${r.reason} (${r.description})</td>
-                            <td><span class="badge badge-pending">${r.status}</span></td>
-                            <td>
-                                <button class="btn-action btn-sm btn-success" onclick="reviewReturn('${r.return_code}', 'APPROVE')">Duyệt (Approve)</button>
-                                <button class="btn-action btn-sm btn-danger" onclick="reviewReturn('${r.return_code}', 'REJECT')">Từ Chối</button>
-                            </td>
+                            <td><span class="badge ${badgeClass}">${r.status}</span></td>
+                            <td>${actionHtml}</td>
                         </tr>
                     `;
                 });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Chưa có yêu cầu đổi trả nào.</td></tr>`;
             }
         }
 
