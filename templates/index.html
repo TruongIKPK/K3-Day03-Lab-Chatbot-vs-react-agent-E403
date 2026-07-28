@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Marked.js Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <style>
         :root {
@@ -343,6 +345,14 @@
             color: var(--text-main);
             border-bottom-left-radius: 4px;
         }
+
+        .msg-bubble.assistant p { margin-bottom: 6px; }
+        .msg-bubble.assistant p:last-child { margin-bottom: 0; }
+        .msg-bubble.assistant ul, .msg-bubble.assistant ol { margin-left: 20px; margin-bottom: 8px; }
+        .msg-bubble.assistant blockquote { border-left: 3px solid var(--primary); padding-left: 10px; margin: 8px 0; color: var(--text-muted); font-style: italic; }
+        .msg-bubble.assistant code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+        .msg-bubble.assistant pre { background: rgba(15,23,42,0.9); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+        .msg-bubble.assistant pre code { background: transparent; padding: 0; }
 
         .chat-input-area {
             padding: 16px 20px;
@@ -1375,6 +1385,17 @@
 
         let currentSessionId = null;
 
+        function formatMarkdownText(rawText) {
+            if (!rawText) return '';
+            if (window.marked && typeof window.marked.parse === 'function') {
+                return window.marked.parse(rawText);
+            }
+            return rawText
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        }
+
         async function sendMessage() {
             const inputEl = document.getElementById('userInput');
             const query = inputEl.value.trim();
@@ -1401,7 +1422,7 @@
                     currentSessionId = data.session_id;
                 }
 
-                chatMessages.innerHTML += `<div class="msg-bubble assistant">${data.response}</div>`;
+                chatMessages.innerHTML += `<div class="msg-bubble assistant">${formatMarkdownText(data.response)}</div>`;
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
                 if (data.trace && data.trace.length > 0) {

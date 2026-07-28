@@ -39,7 +39,7 @@ from tools import (
     get_admin_dashboard_summary
 )
 from providers import get_llm_provider
-from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT, check_guardrails
+from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT, check_guardrails, MAX_ITERATIONS
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
@@ -300,9 +300,105 @@ def api_user_profile():
     return jsonify({"success": True, "profile": profile_info})
 
 
+# --- 🧠 DYNAMIC REACT AI AGENT WORKFLOW & TOOL CALLING ---
+
+def run_react_agent_workflow(user_query: str, user_id: int, user_role: str, session_id: str):
+    """
+    🤖 THỰC THI QUY TRÌNH REACT AI AGENT WORKFLOW VỚI DYNAMIC TOOL CALLING
+    Ép LLM suy luận theo chuỗi: Thought -> Action: tool_name[args] -> Observation -> Final Answer.
+    """
+    provider = get_llm_provider()
+    trace_steps = []
+    
+    # 1. Trích xuất ngữ cảnh bộ nhớ hội thoại phiên thoại trước đó
+    history_msgs = get_chat_history(session_id, limit=6)
+    history_text = "\n".join([f"{m['role']}: {m['message']}" for m in history_msgs])
+    
+    # Gắn thông tin tài khoản người dùng hiện tại
+    user_context = f"THÔNG TIN NGƯỜI DÙNG HIỆN TẠI: user_id = {user_id}, role = '{user_role}'."
+    current_prompt = f"{user_context}\nLịch sử hội thoại gần đây:\n{history_text}\n\nCâu hỏi mới: {user_query}" if history_text else f"{user_context}\n\nCâu hỏi mới: {user_query}"
+    
+    for iteration in range(MAX_ITERATIONS):
+        # Sinh phản hồi qua LLM Provider
+        raw_llm_out = provider.generate(current_prompt, system_prompt=REACT_SYSTEM_PROMPT)
+        llm_out = str(raw_llm_out) if raw_llm_out is not None else ""
+        
+        # Kiểm tra xem LLM đã ra câu trả lời cuối cùng chưa
+        if "Final Answer:" in llm_out:
+            parts = llm_out.split("Final Answer:", 1)
+            thought_text = parts[0].replace("Thought:", "").strip()
+            clean_answer = parts[1].strip()
+            
+            trace_steps.append({
+                "thought": thought_text or "Đã tổng hợp đủ thông tin từ CSDL để kết luận.",
+                "action": "Final Answer Output",
+                "observation": "Hoàn tất phản hồi"
+            })
+            return clean_answer, trace_steps
+
+        # Trích xuất Cú pháp Action: tool_name[args]
+        action_match = re.search(r"Action:\s*(\w+)\[(.*?)\]", llm_out, re.DOTALL)
+        thought_match = re.search(r"Thought:\s*(.*?)(?=Action:|$)", llm_out, re.DOTALL)
+        
+        thought_str = thought_match.group(1).strip() if thought_match else llm_out.strip()
+        
+        if action_match:
+            tool_name = action_match.group(1).strip()
+            raw_args_str = action_match.group(2).strip()
+            
+            # Phân tách tham số
+            parsed_args = [a.strip().strip("'\"`") for a in raw_args_str.split(",") if a.strip()]
+            
+            if tool_name in AVAILABLE_TOOLS:
+                tool_func = AVAILABLE_TOOLS[tool_name]
+                try:
+                    # Ép kiểu int nếu tham số là số
+                    typed_args = [int(a) if a.isdigit() else a for a in parsed_args]
+                    
+                    # Gọi Tool Call thực tế từ AVAILABLE_TOOLS registry
+                    observation = str(tool_func(*typed_args))
+                except TypeError:
+                    # Nếu thiếu tham số (VD: thiếu user_id), tự động bù user_id/admin_id
+                    try:
+                        typed_args = [int(a) if a.isdigit() else a for a in parsed_args]
+                        observation = str(tool_func(user_id, *typed_args))
+                    except Exception as ex:
+                        observation = f"Lỗi tham số khi gọi tool {tool_name}: {str(ex)}"
+                except Exception as e:
+                    observation = f"Lỗi khi thực thi tool {tool_name}: {str(e)}"
+
+                trace_steps.append({
+                    "thought": thought_str or f"Cần gọi tool {tool_name} để tra cứu dữ liệu CSDL.",
+                    "action": f"{tool_name}[{raw_args_str}]",
+                    "observation": observation
+                })
+                
+                # Cập nhật prompt để LLM đọc Observation ở vòng lặp tiếp theo
+                current_prompt += f"\nThought: {thought_str}\nAction: {tool_name}[{raw_args_str}]\nObservation: {observation}\n"
+            else:
+                obs_error = f"Lỗi: Công cụ '{tool_name}' không tồn tại trong danh mục registry."
+                trace_steps.append({
+                    "thought": thought_str,
+                    "action": f"unknown_tool[{tool_name}]",
+                    "observation": obs_error
+                })
+                current_prompt += f"\nThought: {thought_str}\nObservation: {obs_error}\n"
+        else:
+            # Nếu LLM phản hồi trực tiếp không có Action cũng không có Final Answer
+            trace_steps.append({
+                "thought": thought_str,
+                "action": "llm_direct_response",
+                "observation": "Phản hồi trực tiếp từ LLM"
+            })
+            return llm_out.strip(), trace_steps
+            
+    # Hết MAX_ITERATIONS
+    return llm_out.strip(), trace_steps
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    """Xử lý tin nhắn từ FE với ReAct Agent Loop, Bộ Nhớ Context Session & Trích xuất Trace Log"""
+    """Xử lý tin nhắn từ FE với ReAct AI Agent Workflow (100% Dynamic Tool Calling) & Trace Log"""
     data = request.json or {}
     user_query = data.get("query", "")
     user_id = data.get("user_id", 1)
@@ -315,204 +411,20 @@ def api_chat():
     # Lấy hoặc tạo phiên thoại hội thoại
     session_id = get_or_create_session(user_id, input_session_id)
 
-    provider = get_llm_provider()
-    trace_steps = []
-    
     # 1. Kiểm tra Phanh Guardrails (Chống tấn công ngoài phạm vi & vượt quyền)
     guard = check_guardrails(user_query, user_role)
     if not guard["safe"]:
-        trace_steps.append({
+        trace_steps = [{
             "thought": f"Phát hiện tin nhắn ngoài phạm vi hoặc vi phạm an toàn ({guard['type']}). Kích hoạt Phanh Scope Guardrail.",
             "action": "scope_guardrail_block",
             "observation": "Blocked by Scope Policy"
-        })
+        }]
         save_chat_message(session_id, "USER", user_query)
         save_chat_message(session_id, "ASSISTANT", guard["reason"])
         return jsonify({"response": guard["reason"], "trace": trace_steps, "session_id": session_id})
 
-    # Trích xuất mã đơn hàng từ câu hỏi hiện tại HOẶC truy tìm từ bộ nhớ hội thoại trước đó
-    # Hỗ trợ: ORD-8899, ORD - 8899, ORD -8899, ORD- 8899 (cho phép khoảng trắng quanh dấu gạch)
-    order_match = re.search(r"ORD\s*-\s*(\d+)", user_query.upper())
-    code = f"ORD-{order_match.group(1)}" if order_match else None
-    
-    if not code:
-        code_from_memory = extract_order_code_from_history(session_id)
-        if code_from_memory:
-            code = code_from_memory
-            trace_steps.append({
-                "thought": f"🧠 Tái tạo ngữ cảnh bộ nhớ (Session #{session_id}): Nhớ mã đơn hàng {code} từ tin nhắn trước.",
-                "action": f"memory_recall['{code}']",
-                "observation": f"Recalled {code} from context"
-            })
-    
-    # Phân biệt: mã đơn do user nhập trực tiếp vs từ bộ nhớ
-    explicit_code = order_match.group(0) if order_match else None  # User gõ ORD-xxxx trong tin nhắn hiện tại
-    
-    query_lower = user_query.lower()
-    
-    is_cancel_intent = ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower)
-    
-    if is_cancel_intent and explicit_code:
-        # User chỉ rõ mã đơn → hủy trực tiếp
-        res = cancel_order(explicit_code, "Yêu cầu từ AI Chatbot")
-        trace_steps.append({
-            "thought": f"Khách hàng yêu cầu hủy đơn hàng {explicit_code} (Mã đơn được chỉ định rõ ràng). Kích hoạt tool cancel_order.",
-            "action": f"cancel_order['{explicit_code}', 'Yêu cầu từ AI Chatbot']",
-            "observation": res
-        })
-        final_res = f"📝 Thông báo xử lý hủy đơn <strong>{explicit_code}</strong>:<br>{res}"
-
-    elif is_cancel_intent and not explicit_code:
-        # User chỉ nói "muốn hủy đơn" mà KHÔNG chỉ rõ mã → hỏi lại, liệt kê đơn có thể hủy
-        orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
-        # Lọc đơn hàng có thể hủy (PENDING / CONFIRMED)
-        cancellable_lines = []
-        for line in orders_result.split("\n"):
-            if "PENDING" in line or "CONFIRMED" in line:
-                cancellable_lines.append(line.strip())
-        
-        trace_steps.append({
-            "thought": "Khách hàng muốn hủy đơn nhưng KHÔNG chỉ định mã đơn hàng cụ thể. Yêu cầu xác nhận mã đơn trước khi hủy.",
-            "action": f"get_user_orders[{user_id}, 'ALL'] → lọc đơn có thể hủy",
-            "observation": f"Tìm thấy {len(cancellable_lines)} đơn có thể hủy"
-        })
-        
-        if cancellable_lines:
-            orders_list = "<br>".join([f"&nbsp;&nbsp;{line}" for line in cancellable_lines])
-            final_res = (
-                f"⚠️ Bạn muốn hủy đơn hàng nhưng chưa cho tôi biết <strong>mã đơn hàng cụ thể</strong>.<br><br>"
-                f"📋 <strong>Các đơn hàng có thể hủy của bạn:</strong><br>{orders_list}<br><br>"
-                f"💡 Vui lòng nhập chính xác, ví dụ: <em>'Hủy đơn hàng ORD-XXXX'</em>"
-            )
-        else:
-            final_res = (
-                "📭 Hiện tại bạn không có đơn hàng nào ở trạng thái có thể hủy (PENDING hoặc CONFIRMED).<br>"
-                "Chỉ đơn hàng chưa được đóng gói mới có thể hủy."
-            )
-
-    elif "đổi trả" in query_lower and code:
-        eligibility = check_return_eligibility(code)
-        trace_steps.append({
-            "thought": f"Khách hàng hỏi đổi trả đơn {code} (Từ ngữ cảnh hội thoại). Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
-            "action": f"check_return_eligibility['{code}']",
-            "observation": eligibility
-        })
-        
-        if "HỢP LỆ ĐỔI TRẢ" in eligibility:
-            create_res = create_return_request(code, "DEFECTIVE", f"Tạo tự động cho User #{user_id}")
-            trace_steps.append({
-                "thought": f"Đơn hàng {code} hợp lệ đổi trả. Kích hoạt tool create_return_request.",
-                "action": f"create_return_request['{code}', 'DEFECTIVE']",
-                "observation": create_res
-            })
-            final_res = f"✅ Đơn hàng <strong>{code}</strong> đủ điều kiện đổi trả!<br>{create_res}"
-        else:
-            final_res = f"⚠️ Không thể khởi tạo đổi trả:<br>{eligibility}"
-            
-    elif ("kiểm tra" in query_lower or "trạng thái" in query_lower or "giao chưa" in query_lower) and code:
-        details = get_order_details(code)
-        shipping = get_shipping_status(code)
-        trace_steps.append({
-            "thought": f"Truy vấn chi tiết đơn hàng {code} và vị trí vận chuyển.",
-            "action": f"get_order_details['{code}']",
-            "observation": details
-        })
-        trace_steps.append({
-            "thought": f"Truy vấn hành trình vận chuyển.",
-            "action": f"get_shipping_status['{code}']",
-            "observation": shipping
-        })
-        final_res = f"📦 Thông tin đơn hàng <strong>{code}</strong>:<br><pre style='font-family:sans-serif;'>{details}\n\n{shipping}</pre>"
-        
-    elif any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "bao nhiêu đơn", "xem đơn hàng", "đơn hàng hiện có", "tất cả đơn hàng", "my orders", "lịch sử đơn hàng", "lịch sử mua hàng", "đã đặt bao nhiêu", "tôi đã mua", "số đơn hiện tại", "số đơn", "mấy đơn", "don hang cua toi", "xem don hang", "co bao nhieu don"]):
-        orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
-        trace_steps.append({
-            "thought": f"Khách hàng yêu cầu xem danh sách tất cả đơn hàng. Gọi tool get_user_orders[{user_id}].",
-            "action": f"get_user_orders[{user_id}, 'ALL']",
-            "observation": orders_result
-        })
-        # Đếm số đơn hàng
-        order_lines = [line for line in orders_result.split("\n") if line.strip().startswith("- ORD-")]
-        count = len(order_lines)
-        if count > 0:
-            final_res = (
-                f"📋 <strong>Danh sách đơn hàng của bạn ({count} đơn):</strong><br>"
-                f"<pre style='font-family:sans-serif;'>{orders_result}</pre>"
-            )
-        else:
-            final_res = "📭 Bạn hiện chưa có đơn hàng nào trong hệ thống. Hãy khám phá sản phẩm và đặt hàng ngay nhé!"
-
-    elif any(kw in query_lower for kw in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]):
-        # Trích xuất keyword tìm kiếm từ câu hỏi
-        search_keyword = query_lower
-        for prefix in ["tìm sản phẩm", "tìm kiếm sản phẩm", "search product", "xem sản phẩm", "có sản phẩm nào", "sản phẩm gì"]:
-            search_keyword = search_keyword.replace(prefix, "").strip()
-        if not search_keyword or len(search_keyword) < 2:
-            search_keyword = "%"  # Tìm tất cả nếu không có keyword cụ thể
-        products_result = search_products(search_keyword)
-        trace_steps.append({
-            "thought": f"Khách hàng tìm kiếm sản phẩm với từ khóa '{search_keyword}'. Gọi tool search_products.",
-            "action": f"search_products['{search_keyword}']",
-            "observation": products_result
-        })
-        final_res = f"🛒 <strong>Kết quả tìm kiếm:</strong><br><pre style='font-family:sans-serif;'>{products_result}</pre>"
-
-    elif "admin" in query_lower or "thống kê" in query_lower or "doanh thu" in query_lower:
-        if user_role == "ADMIN":
-            summary = get_admin_dashboard_summary(user_id)
-            trace_steps.append({
-                "thought": f"Xác nhận User #{user_id} có quyền ADMIN. Gọi tool get_admin_dashboard_summary.",
-                "action": f"get_admin_dashboard_summary[{user_id}]",
-                "observation": summary
-            })
-            final_res = f"<pre style='font-family:sans-serif;'>{summary}</pre>"
-        else:
-            trace_steps.append({
-                "thought": f"Cảnh báo bảo mật: User #{user_id} là CUSTOMER nhưng yêu cầu xem dữ liệu Admin.",
-                "action": "security_check",
-                "observation": "Access Denied"
-            })
-            final_res = "🚫 TỪ CHỐI TRUY CẬP: Tài khoản của bạn không có quyền xem thông tin Admin."
-    else:
-        # Lấy lịch sử hội thoại 6 tin gần đây để làm Context cho LLM
-        history_msgs = get_chat_history(session_id, limit=6)
-        history_text = "\n".join([f"{m['role']}: {m['message']}" for m in history_msgs])
-        
-        user_context_info = f"THÔNG TIN TÀI KHOẢN ĐANG ĐĂNG NHẬP: user_id = {user_id}, role = {user_role}."
-        if history_text:
-            context_prompt = f"{user_context_info}\nLịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}"
-        else:
-            context_prompt = f"{user_context_info}\n\nCâu hỏi mới: {user_query}"
-
-        llm_out = provider.generate(context_prompt, system_prompt=REACT_SYSTEM_PROMPT)
-        
-        # Tách lọc sạch Thought và Final Answer từ LLM Output
-        if "Final Answer:" in llm_out:
-            parts = llm_out.split("Final Answer:", 1)
-            thought_part = parts[0].strip()
-            clean_final_answer = parts[1].strip()
-            
-            if thought_part:
-                thought_text = thought_part.replace("Thought:", "").strip()
-                trace_steps.append({
-                    "thought": thought_text,
-                    "action": "generate_final_answer",
-                    "observation": "Extracted Final Answer"
-                })
-            else:
-                trace_steps.append({
-                    "thought": "Sinh phản hồi câu trả lời cuối cùng qua LLM Engine.",
-                    "action": "generate_response",
-                    "observation": "Success"
-                })
-            final_res = clean_final_answer
-        else:
-            trace_steps.append({
-                "thought": "Sinh phản hồi qua LLM Engine.",
-                "action": "generate_response",
-                "observation": "Success"
-            })
-            final_res = llm_out
+    # 2. KÍCH HOẠT DYNAMIC REACT AI AGENT WORKFLOW VỚI TOOL CALLING
+    final_res, trace_steps = run_react_agent_workflow(user_query, user_id, user_role, session_id)
 
     # Lưu tin nhắn vào CSDL SQLite cho bộ nhớ phiên thoại
     save_chat_message(session_id, "USER", user_query)
