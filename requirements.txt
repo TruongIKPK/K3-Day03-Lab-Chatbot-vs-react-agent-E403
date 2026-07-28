@@ -1,5 +1,6 @@
 google-genai
 openai
 anthropic
+flask
 python-dotenv
 requests
