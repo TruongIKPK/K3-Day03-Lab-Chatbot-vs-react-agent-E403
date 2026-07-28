@@ -91,33 +91,70 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
 
 def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
     """Tra cứu danh sách đơn hàng của khách hàng theo user_id trong SQLite."""
+    valid_statuses = ["ALL", "PENDING", "CONFIRMED", "PACKING", "SHIPPING", "DELIVERED", "CANCELLED"]
+    status = str(status_filter).strip().upper()
+    if status not in valid_statuses:
+        return f"LỖI: status_filter '{status_filter}' không hợp lệ. Chọn: {', '.join(valid_statuses)}."
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         query = """
-            SELECT o.order_code, o.status, o.total_amount, GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')', ', ') AS items
+            SELECT
+                o.id,
+                o.order_code,
+                o.status,
+                o.total_amount,
+                o.payment_method,
+                o.created_at,
+                s.status AS shipping_status,
+                s.tracking_number,
+                (
+                    SELECT GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')', ', ')
+                    FROM order_items oi
+                    JOIN products p ON oi.product_id = p.id
+                    WHERE oi.order_id = o.id
+                ) AS items,
+                (
+                    SELECT rr.return_code || ' - ' || rr.status
+                    FROM return_requests rr
+                    WHERE rr.order_id = o.id
+                    ORDER BY rr.created_at DESC
+                    LIMIT 1
+                ) AS latest_return
             FROM orders o
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
+            LEFT JOIN shipping s ON s.order_id = o.id
             WHERE o.user_id = ?
         """
         params = [int(user_id)]
-        
-        if status_filter.upper() != "ALL":
+
+        if status != "ALL":
             query += " AND o.status = ?"
-            params.append(status_filter.upper())
-            
-        query += " GROUP BY o.id ORDER BY o.created_at DESC;"
-        
+            params.append(status)
+
+        query += " ORDER BY o.created_at DESC;"
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
-        
-        if rows:
-            orders = [f"- {r['order_code']}: Trạng thái {r['status']} | Giá trị: {r['total_amount']:,} VNĐ ({r['items']})" for r in rows]
-            return f"Danh sách đơn hàng của User #{user_id}:\n" + "\n".join(orders)
-        return f"Không tìm thấy đơn hàng nào cho User #{user_id}."
+
+        if not rows:
+            suffix = "" if status == "ALL" else f" với trạng thái {status}"
+            return f"Không tìm thấy đơn hàng nào cho User #{user_id}{suffix}."
+
+        orders = []
+        for r in rows:
+            shipping = r["shipping_status"] or "CHƯA TẠO"
+            tracking = f", vận đơn {r['tracking_number']}" if r["tracking_number"] else ""
+            latest_return = f" | Đổi trả: {r['latest_return']}" if r["latest_return"] else ""
+            orders.append(
+                f"- {r['order_code']}: {r['status']} | Ship: {shipping}{tracking} | "
+                f"Tổng: {r['total_amount']:,.0f} VNĐ | Thanh toán: {r['payment_method']} | "
+                f"Ngày tạo: {r['created_at']} | Sản phẩm: {r['items'] or 'Chưa có sản phẩm'}{latest_return}"
+            )
+
+        return f"Danh sách đơn hàng của User #{user_id}:\n" + "\n".join(orders)
     except Exception as e:
         return f"LỖI TRUY VẤN SQLITE (get_user_orders): {str(e)}"
 
@@ -270,40 +307,75 @@ def check_return_eligibility(order_code: str) -> str:
         return f"LỖI TRUY VẤN SQLITE (check_return_eligibility): {str(e)}"
 
 
-def create_return_request(order_code: str, reason: str = "DEFECTIVE", description: str = "Khách hàng đổi trả") -> str:
+def create_return_request(order_code: str, reason: str = "DEFECTIVE", description: str = "Khách hàng đổi trả", image_url: str = "") -> str:
     """Khởi tạo đơn đổi trả trong bảng return_requests SQLite."""
-    code = order_code.strip().upper()
-    check_res = check_return_eligibility(code)
-    if "HỢP LỆ ĐỔI TRẢ" not in check_res:
-        return f"TẠO ĐỔI TRẢ THẤT BẠI: {check_res}"
-        
+    code = str(order_code).strip().upper()
+    valid_reasons = ["DEFECTIVE", "WRONG_ITEM", "DAMAGED", "MIND_CHANGE"]
+    reason_upper = str(reason).strip().upper()
+    if reason_upper not in valid_reasons:
+        return f"LỖI: Lý do đổi trả '{reason}' không hợp lệ. Chọn: {', '.join(valid_reasons)}."
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("SELECT id, user_id FROM orders WHERE order_code = ?;", (code,))
-        o = cursor.fetchone()
-        if not o:
-            conn.close()
-            return f"LỖI: Không tìm thấy đơn hàng '{code}'."
-            
-        ret_code = f"RET-{datetime.now().strftime('%M%S')}"
-        valid_reason = reason.upper() if reason.upper() in ['DEFECTIVE', 'WRONG_ITEM', 'DAMAGED', 'MIND_CHANGE'] else 'DEFECTIVE'
-        
+
         cursor.execute("""
-            INSERT INTO return_requests (return_code, order_id, user_id, reason, description, status)
-            VALUES (?, ?, ?, ?, ?, 'REQUESTED');
-        """, (ret_code, o["id"], o["user_id"], valid_reason, description))
-        
+            SELECT
+                o.id,
+                o.user_id,
+                o.status AS order_status,
+                s.status AS shipping_status,
+                s.delivered_at,
+                CAST((julianday('now') - julianday(s.delivered_at)) AS INTEGER) AS days_since_delivery
+            FROM orders o
+            LEFT JOIN shipping s ON o.id = s.order_id
+            WHERE o.order_code = ?;
+        """, (code,))
+        order_row = cursor.fetchone()
+
+        if not order_row:
+            conn.close()
+            return f"TẠO ĐỔI TRẢ THẤT BẠI: Không tìm thấy đơn hàng '{code}'."
+
+        if order_row["order_status"] != "DELIVERED" or order_row["shipping_status"] != "DELIVERED" or not order_row["delivered_at"]:
+            conn.close()
+            return f"TẠO ĐỔI TRẢ THẤT BẠI: Đơn '{code}' chưa giao thành công (đơn: {order_row['order_status']}, ship: {order_row['shipping_status'] or 'CHƯA TẠO'})."
+
+        days = order_row["days_since_delivery"]
+        if days is None or days > 7:
+            conn.close()
+            return f"TẠO ĐỔI TRẢ THẤT BẠI: Đơn '{code}' đã giao {days} ngày, quá hạn đổi trả 7 ngày."
+
+        cursor.execute("""
+            SELECT return_code, status
+            FROM return_requests
+            WHERE order_id = ?
+              AND status IN ('REQUESTED', 'REVIEWING', 'APPROVED', 'RETURNING')
+            ORDER BY created_at DESC
+            LIMIT 1;
+        """, (order_row["id"],))
+        existing = cursor.fetchone()
+        if existing:
+            conn.close()
+            return f"TẠO ĐỔI TRẢ THẤT BẠI: Đơn '{code}' đã có yêu cầu {existing['return_code']} đang ở trạng thái {existing['status']}."
+
+        ret_code = f"RET-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100, 999)}"
+        cursor.execute("""
+            INSERT INTO return_requests (return_code, order_id, user_id, reason, description, status, image_url)
+            VALUES (?, ?, ?, ?, ?, 'REQUESTED', ?);
+        """, (ret_code, order_row["id"], order_row["user_id"], reason_upper, description, image_url))
+
         conn.commit()
         conn.close()
-        
+
         return (
-            f"✅ TẠO YÊU CẦU ĐỔI TRẢ THÀNH CÔNG (SQLITE)!\n"
+            f"✅ TẠO YÊU CẦU ĐỔI TRẢ THÀNH CÔNG!\n"
             f"- Mã yêu cầu: {ret_code}\n"
             f"- Đơn hàng: {code}\n"
-            f"- Lý do: {valid_reason} ({description})\n"
-            f"- Trạng thái: REQUESTED (Đã gửi bộ phận Admin duyệt)."
+            f"- Điều kiện: Đã giao {days} ngày, còn trong hạn 7 ngày\n"
+            f"- Lý do: {reason_upper}\n"
+            f"- Mô tả: {description}\n"
+            f"- Trạng thái: REQUESTED (chờ Admin duyệt)."
         )
     except Exception as e:
         return f"LỖI THỰC THI SQLITE (create_return_request): {str(e)}"
