@@ -28,16 +28,14 @@ def _verify_admin(conn, admin_id: int) -> bool:
 # --- GROUP 1: APIS ĐƠN HÀNG & SẢN PHẨM (CUSTOMER) ---
 
 def create_order(user_id: int, product_id: int, quantity: int = 1, payment_method: str = "COD", shipping_address: str = "123 Nguyễn Huệ, Quận 1, TP.HCM") -> str:
-    
     """
-    Create a new order and simulate payment in the SQLite database.
+    Create a new customer order and simulate payment.
 
-    Business Flow:
-        - Validate product exists.
-        - Validate inventory.
-        - Create order.
-        - Create order items.
-        - Update product stock.
+    Business Rules:
+        - Product must exist.
+        - Product must have sufficient stock.
+        - Create order and order items.
+        - Deduct inventory.
         - Create shipping record.
 
     Args:
@@ -61,14 +59,15 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
             Delivery address.
 
     Returns:
-        str:
-            Success:
-                Human-readable order confirmation.
+        str
 
-            Failure:
-                Product not found.
-                Out of stock.
-                SQLite execution error.
+        Success:
+            Order confirmation.
+
+        Failure:
+            Product not found.
+            Insufficient stock.
+            SQLite execution error.
 
     Database:
         - products
@@ -137,28 +136,39 @@ def create_order(user_id: int, product_id: int, quantity: int = 1, payment_metho
 
 def get_user_orders(user_id: int = 1, status_filter: str = "ALL") -> str:
     """
-Retrieve all orders of a customer.
+    Retrieve all orders of a customer.
 
-Args:
-    user_id (int):
-        Customer ID.
+    Business Rules:
+        - Retrieve orders belonging to the specified customer.
+        - Optionally filter by status.
 
-    status_filter (str, optional):
-        Filter by order status.
-        Default = "ALL".
+    Args:
+        user_id (int):
+            Customer ID.
 
-Returns:
-    str:
-        List of matching orders or readable error.
+        status_filter (str, optional):
+            Order status filter.
+            Default = "ALL".
 
-Database:
-    - orders
-    - order_items
-    - products
+    Returns:
+        str
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Success:
+            List of matching orders.
+
+        Failure:
+            No orders found.
+            SQLite execution error.
+
+    Database:
+        - orders
+        - order_items
+        - products
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -192,22 +202,26 @@ Error Contract:
 
 def get_order_details(order_code: str) -> str:
     """
-    Retrieve detailed information of an order from the SQLite database.
+    Retrieve detailed information about an order.
+
+    Business Rules:
+        - Order code must not be empty.
+        - Order must exist.
 
     Args:
         order_code (str):
             Unique order code.
-            Example: "ORD-2024-001"
 
     Returns:
-        str:
-            Success:
-                Human-readable order information.
+        str
 
-            Failure:
-                "LỖI: Mã đơn hàng không được để trống."
-                "LỖI: Không tìm thấy đơn hàng ..."
-                "LỖI TRUY VẤN SQLITE: ..."
+        Success:
+            Complete order information.
+
+        Failure:
+            Invalid order code.
+            Order not found.
+            SQLite execution error.
 
     Database:
         - orders
@@ -275,29 +289,37 @@ def get_order_details(order_code: str) -> str:
 
 def cancel_order(order_code: str, reason: str = "Đổi ý không mua nữa") -> str:
     """
-Cancel an order if it is still cancellable.
+    Cancel an order.
 
-Business Rules:
-    - Order must exist.
-    - Only PENDING or CONFIRMED orders can be cancelled.
+    Business Rules:
+        - Order must exist.
+        - Only PENDING or CONFIRMED orders can be cancelled.
 
-Args:
-    order_code (str):
-        Order code.
+    Args:
+        order_code (str):
+            Order code.
 
-    reason (str, optional):
-        Cancellation reason.
+        reason (str, optional):
+            Cancellation reason.
 
-Returns:
-    str:
-        Cancellation result.
+    Returns:
+        str
 
-Database:
-    - orders
+        Success:
+            Order cancelled successfully.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Order not found.
+            Order cannot be cancelled.
+            SQLite execution error.
+
+    Database:
+        - orders
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     code = order_code.strip().upper()
     try:
         conn = get_connection()
@@ -325,22 +347,32 @@ Error Contract:
 
 def search_products(keyword: str) -> str:
     """
-Search products by keyword.
+    Search products by keyword.
 
-Args:
-    keyword (str):
-        Product name keyword.
+    Business Rules:
+        - Search product names using partial matching.
 
-Returns:
-    str:
-        Matching products or readable error.
+    Args:
+        keyword (str):
+            Product keyword.
 
-Database:
-    - products
+    Returns:
+        str
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Success:
+            Matching products.
+
+        Failure:
+            No products found.
+            SQLite execution error.
+
+    Database:
+        - products
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -361,15 +393,26 @@ Error Contract:
 
 def get_shipping_status(order_code: str) -> str:
     """
-    Retrieve shipping information of an order.
+    Retrieve shipping status of an order.
+
+    Business Rules:
+        - Order code must not be empty.
+        - Shipping record must exist.
 
     Args:
         order_code (str):
             Order code.
 
     Returns:
-        str:
-            Shipping information or readable error.
+        str
+
+        Success:
+            Shipping information.
+
+        Failure:
+            Order not found.
+            Shipping information unavailable.
+            SQLite execution error.
 
     Database:
         - orders
@@ -377,6 +420,7 @@ def get_shipping_status(order_code: str) -> str:
 
     Error Contract:
         Never raises exceptions.
+        Always returns a readable string.
     """
 
     if not order_code or not order_code.strip():
@@ -429,20 +473,28 @@ def get_shipping_status(order_code: str) -> str:
 
 def check_return_eligibility(order_code: str) -> str:
     """
-    Check whether an order satisfies the 7-day return policy.
+    Check whether an order is eligible for return.
 
     Business Rules:
         - Order must exist.
-        - Order status = DELIVERED.
-        - Shipping status = DELIVERED.
-        - Delivered within 7 days.
+        - Order status must be DELIVERED.
+        - Shipping status must be DELIVERED.
+        - Delivery date must be within 7 days.
 
     Args:
-        order_code (str)
+        order_code (str):
+            Order code.
 
     Returns:
-        str:
-            Eligibility result.
+        str
+
+        Success:
+            Return eligibility result.
+
+        Failure:
+            Order not found.
+            Return policy not satisfied.
+            SQLite execution error.
 
     Database:
         - orders
@@ -450,6 +502,7 @@ def check_return_eligibility(order_code: str) -> str:
 
     Error Contract:
         Never raises exceptions.
+        Always returns a readable string.
     """
 
     if not order_code or not order_code.strip():
@@ -520,33 +573,41 @@ def check_return_eligibility(order_code: str) -> str:
     
 def create_return_request(order_code: str, reason: str = "DEFECTIVE", description: str = "Khách hàng đổi trả") -> str:
     """
-Create a return request for an eligible order.
+    Create a return request.
 
-Business Rules:
-    - Order must satisfy return policy.
-    - Create a new return request.
+    Business Rules:
+        - Order must satisfy return policy.
+        - Only one active return request is allowed per order.
 
-Args:
-    order_code (str):
-        Order code.
+    Args:
+        order_code (str):
+            Order code.
 
-    reason (str, optional):
-        Return reason.
+        reason (str, optional):
+            Return reason.
 
-    description (str, optional):
-        Additional description.
+        description (str, optional):
+            Additional description.
 
-Returns:
-    str:
-        Return request creation result.
+    Returns:
+        str
 
-Database:
-    - orders
-    - return_requests
+        Success:
+            Return request created.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Order not eligible.
+            Duplicate request.
+            SQLite execution error.
+
+    Database:
+        - orders
+        - return_requests
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     code = order_code.strip().upper()
     check_res = check_return_eligibility(code)
     if "HỢP LỆ ĐỔI TRẢ" not in check_res:
@@ -593,23 +654,33 @@ Error Contract:
 
 def get_return_request_status(order_code: str) -> str:
     """
-Retrieve return request information.
+    Retrieve return request information.
 
-Args:
-    order_code (str):
-        Order code or return code.
+    Business Rules:
+        - Search by order code or return code.
 
-Returns:
-    str:
-        Return request status.
+    Args:
+        order_code (str):
+            Order code or return code.
 
-Database:
-    - return_requests
-    - orders
+    Returns:
+        str
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Success:
+            Return request information.
+
+        Failure:
+            Request not found.
+            SQLite execution error.
+
+    Database:
+        - return_requests
+        - orders
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     code = order_code.strip().upper()
     try:
         conn = get_connection()
@@ -635,26 +706,34 @@ Error Contract:
 
 def cancel_return_request(return_id: str) -> str:
     """
-Cancel a return request.
+    Cancel a return request.
 
-Business Rules:
-    - Request must exist.
-    - Only REQUESTED status can be cancelled.
+    Business Rules:
+        - Return request must exist.
+        - Only REQUESTED or REVIEWING requests can be cancelled.
 
-Args:
-    return_id (str):
-        Return request code.
+    Args:
+        return_id (str):
+            Return request code.
 
-Returns:
-    str:
-        Cancellation result.
+    Returns:
+        str
 
-Database:
-    - return_requests
+        Success:
+            Return request cancelled.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Request not found.
+            Request cannot be cancelled.
+            SQLite execution error.
+
+    Database:
+        - return_requests
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     rid = return_id.strip().upper()
     try:
         conn = get_connection()
@@ -681,22 +760,32 @@ Error Contract:
 
 def get_user_profile(user_id: int = 1) -> str:
     """
-Retrieve customer profile information.
+    Retrieve customer profile.
 
-Args:
-    user_id (int):
-        Customer ID.
+    Business Rules:
+        - User must exist.
 
-Returns:
-    str:
-        User profile information.
+    Args:
+        user_id (int):
+            Customer ID.
 
-Database:
-    - users
+    Returns:
+        str
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Success:
+            Customer profile.
+
+        Failure:
+            User not found.
+            SQLite execution error.
+
+    Database:
+        - users
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -716,41 +805,48 @@ Error Contract:
 
 def add_product(admin_id: int, name: str, category_id: int, price: float, stock: int, description: str = "Sản phẩm mới") -> str:
     """
-Add a new product to the catalog.
+    Add a new product.
 
-Business Rules:
-    - Caller must have ADMIN role.
+    Business Rules:
+        - Caller must have ADMIN role.
 
-Args:
-    admin_id (int):
-        Administrator ID.
+    Args:
+        admin_id (int):
+            Administrator ID.
 
-    name (str):
-        Product name.
+        name (str):
+            Product name.
 
-    category_id (int):
-        Product category.
+        category_id (int):
+            Category ID.
 
-    price (float):
-        Product price.
+        price (float):
+            Product price.
 
-    stock (int):
-        Initial inventory.
+        stock (int):
+            Initial stock quantity.
 
-    description (str, optional):
-        Product description.
+        description (str, optional):
+            Product description.
 
-Returns:
-    str:
-        Product creation result.
+    Returns:
+        str
 
-Database:
-    - users
-    - products
+        Success:
+            Product created.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Permission denied.
+            SQLite execution error.
+
+    Database:
+        - users
+        - products
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):
@@ -774,32 +870,41 @@ Error Contract:
 
 def update_product_stock(admin_id: int, product_id: int, new_stock: int) -> str:
     """
-Update product inventory.
+    Update product inventory.
 
-Business Rules:
-    - Caller must have ADMIN role.
+    Business Rules:
+        - Caller must have ADMIN role.
+        - Product must exist.
 
-Args:
-    admin_id (int):
-        Administrator ID.
+    Args:
+        admin_id (int):
+            Administrator ID.
 
-    product_id (int):
-        Product ID.
+        product_id (int):
+            Product ID.
 
-    new_stock (int):
-        Updated inventory quantity.
+        new_stock (int):
+            Updated stock quantity.
 
-Returns:
-    str:
-        Update result.
+    Returns:
+        str
 
-Database:
-    - users
-    - products
+        Success:
+            Inventory updated.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Permission denied.
+            Product not found.
+            SQLite execution error.
+
+    Database:
+        - users
+        - products
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):
@@ -824,33 +929,43 @@ Error Contract:
 def update_order_status(admin_id: int, order_code: str, new_status: str) -> str:
 
     """
-Update order status.
+    Update an order status.
 
-Business Rules:
-    - Caller must have ADMIN role.
-    - Status must be valid.
+    Business Rules:
+        - Caller must have ADMIN role.
+        - Order must exist.
+        - Target status must be valid.
 
-Args:
-    admin_id (int):
-        Administrator ID.
+    Args:
+        admin_id (int):
+            Administrator ID.
 
-    order_code (str):
-        Order code.
+        order_code (str):
+            Order code.
 
-    new_status (str):
-        Target order status.
+        new_status (str):
+            Target status.
 
-Returns:
-    str:
-        Update result.
+    Returns:
+        str
 
-Database:
-    - users
-    - orders
+        Success:
+            Order status updated.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Permission denied.
+            Invalid status.
+            Order not found.
+            SQLite execution error.
+
+    Database:
+        - users
+        - orders
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     code = order_code.strip().upper()
     valid_statuses = ['PENDING', 'CONFIRMED', 'PACKING', 'SHIPPING', 'DELIVERED', 'CANCELLED']
     status_upper = new_status.strip().upper()
@@ -879,36 +994,47 @@ Error Contract:
 
 def review_return_request(admin_id: int, return_code: str, action: str, note: str = "Đã xem xét") -> str:
     """
-Approve or reject a return request.
+    Approve or reject a return request.
 
-Business Rules:
-    - Caller must have ADMIN role.
-    - Action must be APPROVE or REJECT.
+    Business Rules:
+        - Caller must have ADMIN role.
+        - Request must exist.
+        - Request must not have been processed.
+        - Action must be APPROVE or REJECT.
 
-Args:
-    admin_id (int):
-        Administrator ID.
+    Args:
+        admin_id (int):
+            Administrator ID.
 
-    return_code (str):
-        Return request code.
+        return_code (str):
+            Return request code.
 
-    action (str):
-        APPROVE or REJECT.
+        action (str):
+            APPROVE or REJECT.
 
-    note (str, optional):
-        Admin note.
+        note (str, optional):
+            Administrator note.
 
-Returns:
-    str:
-        Review result.
+    Returns:
+        str
 
-Database:
-    - users
-    - return_requests
+        Success:
+            Request reviewed successfully.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Permission denied.
+            Invalid action.
+            Request not found.
+            SQLite execution error.
+
+    Database:
+        - users
+        - return_requests
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     rcode = return_code.strip().upper()
     act = action.strip().upper()
     
@@ -956,32 +1082,35 @@ Error Contract:
 
 def get_admin_dashboard_summary(admin_id: int = 3) -> str:
     """
-Retrieve dashboard statistics for administrators.
+    Retrieve administrator dashboard summary.
 
-Business Rules:
-    - Caller must have ADMIN role.
+    Business Rules:
+        - Caller must have ADMIN role.
 
-Args:
-    admin_id (int):
-        Administrator ID.
+    Args:
+        admin_id (int):
+            Administrator ID.
 
-Returns:
-    str:
-        Dashboard summary including:
-            - Total orders
-            - Pending return requests
-            - Product count
-            - Revenue
+    Returns:
+        str
 
-Database:
-    - users
-    - orders
-    - return_requests
-    - products
+        Success:
+            Dashboard statistics.
 
-Error Contract:
-    Never raises exceptions.
-"""
+        Failure:
+            Permission denied.
+            SQLite execution error.
+
+    Database:
+        - users
+        - orders
+        - products
+        - return_requests
+
+    Error Contract:
+        Never raises exceptions.
+        Always returns a readable string.
+    """
     try:
         conn = get_connection()
         if not _verify_admin(conn, admin_id):
