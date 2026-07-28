@@ -17,9 +17,13 @@ from tools import (
     create_order,
     get_user_orders,
     get_order_details,
+    cancel_order,
     get_shipping_status,
     check_return_eligibility,
     create_return_request,
+    cancel_return_request,
+    get_return_request_status,
+    get_user_profile,
     add_product,
     update_product_stock,
     update_order_status,
@@ -27,7 +31,7 @@ from tools import (
     get_admin_dashboard_summary
 )
 from providers import get_llm_provider
-from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT
+from prompts import REACT_SYSTEM_PROMPT, CHATBOT_BASELINE_PROMPT, check_guardrails
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
@@ -255,6 +259,39 @@ def api_admin_dashboard():
     })
 
 
+@app.route("/api/orders/cancel", methods=["POST"])
+def api_cancel_order():
+    """Khách hàng hủy đơn hàng (PENDING hoặc CONFIRMED)"""
+    data = request.json or {}
+    order_code = data.get("order_code", "").strip()
+    reason = data.get("reason", "Khách hàng hủy từ Web App")
+    if not order_code:
+        return jsonify({"success": False, "message": "Vui lòng cung cấp mã đơn hàng cần hủy."})
+    msg = cancel_order(order_code, reason)
+    success = "HỦY ĐƠN THÀNH CÔNG" in msg
+    return jsonify({"success": success, "message": msg})
+
+
+@app.route("/api/returns/cancel", methods=["POST"])
+def api_cancel_return():
+    """Khách hàng hủy yêu cầu đổi trả đang chờ duyệt"""
+    data = request.json or {}
+    return_id = data.get("return_id", "").strip()
+    if not return_id:
+        return jsonify({"success": False, "message": "Vui lòng cung cấp mã yêu cầu đổi trả."})
+    msg = cancel_return_request(return_id)
+    success = "ĐÃ HỦY" in msg
+    return jsonify({"success": success, "message": msg})
+
+
+@app.route("/api/users/profile", methods=["GET"])
+def api_user_profile():
+    """Tra cứu thông tin cá nhân khách hàng"""
+    user_id = request.args.get("user_id", 1, type=int)
+    profile_info = get_user_profile(user_id)
+    return jsonify({"success": True, "profile": profile_info})
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     """Xử lý tin nhắn từ FE với ReAct Agent Loop & Trích xuất Trace Log"""
@@ -269,11 +306,32 @@ def api_chat():
     provider = get_llm_provider()
     trace_steps = []
     
+    # 1. Kiểm tra Phanh Guardrails (Chống tấn công ngoài phạm vi & vượt quyền)
+    guard = check_guardrails(user_query, user_role)
+    if not guard["safe"]:
+        trace_steps.append({
+            "thought": f"Phát hiện tin nhắn ngoài phạm vi hoặc vi phạm an toàn ({guard['type']}). Kích hoạt Phanh Scope Guardrail.",
+            "action": "scope_guardrail_block",
+            "observation": "Blocked by Scope Policy"
+        })
+        return jsonify({"response": guard["reason"], "trace": trace_steps})
+
     # Trích xuất mã đơn hàng nếu có
     order_match = re.search(r"ORD-\d+", user_query.upper())
     code = order_match.group(0) if order_match else None
     
-    if "đổi trả" in user_query.lower() and code:
+    query_lower = user_query.lower()
+    
+    if ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower) and code:
+        res = cancel_order(code, "Yêu cầu từ AI Chatbot")
+        trace_steps.append({
+            "thought": f"Khách hàng muốn hủy đơn hàng {code}. Kích hoạt tool cancel_order.",
+            "action": f"cancel_order['{code}', 'Yêu cầu từ AI Chatbot']",
+            "observation": res
+        })
+        final_res = f"📝 Thông báo xử lý hủy đơn <strong>{code}</strong>:<br>{res}"
+
+    elif "đổi trả" in query_lower and code:
         eligibility = check_return_eligibility(code)
         trace_steps.append({
             "thought": f"Khách hàng hỏi đổi trả đơn {code}. Dùng tool check_return_eligibility kiểm tra hạn 7 ngày.",
@@ -292,7 +350,7 @@ def api_chat():
         else:
             final_res = f"⚠️ Không thể khởi tạo đổi trả:<br>{eligibility}"
             
-    elif ("kiểm tra" in user_query.lower() or "trạng thái" in user_query.lower()) and code:
+    elif ("kiểm tra" in query_lower or "trạng thái" in query_lower or "giao chưa" in query_lower) and code:
         details = get_order_details(code)
         shipping = get_shipping_status(code)
         trace_steps.append({
@@ -307,7 +365,7 @@ def api_chat():
         })
         final_res = f"📦 Thông tin đơn hàng <strong>{code}</strong>:<br><pre style='font-family:sans-serif;'>{details}\n\n{shipping}</pre>"
         
-    elif "admin" in user_query.lower() or "thống kê" in user_query.lower() or "doanh thu" in user_query.lower():
+    elif "admin" in query_lower or "thống kê" in query_lower or "doanh thu" in query_lower:
         if user_role == "ADMIN":
             summary = get_admin_dashboard_summary(user_id)
             trace_steps.append({
