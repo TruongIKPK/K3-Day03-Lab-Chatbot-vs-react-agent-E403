@@ -331,8 +331,9 @@ def api_chat():
         return jsonify({"response": guard["reason"], "trace": trace_steps, "session_id": session_id})
 
     # Trích xuất mã đơn hàng từ câu hỏi hiện tại HOẶC truy tìm từ bộ nhớ hội thoại trước đó
-    order_match = re.search(r"ORD-\d+", user_query.upper())
-    code = order_match.group(0) if order_match else None
+    # Hỗ trợ: ORD-8899, ORD - 8899, ORD -8899, ORD- 8899 (cho phép khoảng trắng quanh dấu gạch)
+    order_match = re.search(r"ORD\s*-\s*(\d+)", user_query.upper())
+    code = f"ORD-{order_match.group(1)}" if order_match else None
     
     if not code:
         code_from_memory = extract_order_code_from_history(session_id)
@@ -344,16 +345,50 @@ def api_chat():
                 "observation": f"Recalled {code} from context"
             })
     
+    # Phân biệt: mã đơn do user nhập trực tiếp vs từ bộ nhớ
+    explicit_code = order_match.group(0) if order_match else None  # User gõ ORD-xxxx trong tin nhắn hiện tại
+    
     query_lower = user_query.lower()
     
-    if ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower) and code:
-        res = cancel_order(code, "Yêu cầu từ AI Chatbot")
+    is_cancel_intent = ("hủy" in query_lower or "huy" in query_lower or "cancel" in query_lower)
+    
+    if is_cancel_intent and explicit_code:
+        # User chỉ rõ mã đơn → hủy trực tiếp
+        res = cancel_order(explicit_code, "Yêu cầu từ AI Chatbot")
         trace_steps.append({
-            "thought": f"Khách hàng muốn hủy đơn hàng {code} (Từ ngữ cảnh hội thoại). Kích hoạt tool cancel_order.",
-            "action": f"cancel_order['{code}', 'Yêu cầu từ AI Chatbot']",
+            "thought": f"Khách hàng yêu cầu hủy đơn hàng {explicit_code} (Mã đơn được chỉ định rõ ràng). Kích hoạt tool cancel_order.",
+            "action": f"cancel_order['{explicit_code}', 'Yêu cầu từ AI Chatbot']",
             "observation": res
         })
-        final_res = f"📝 Thông báo xử lý hủy đơn <strong>{code}</strong>:<br>{res}"
+        final_res = f"📝 Thông báo xử lý hủy đơn <strong>{explicit_code}</strong>:<br>{res}"
+
+    elif is_cancel_intent and not explicit_code:
+        # User chỉ nói "muốn hủy đơn" mà KHÔNG chỉ rõ mã → hỏi lại, liệt kê đơn có thể hủy
+        orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
+        # Lọc đơn hàng có thể hủy (PENDING / CONFIRMED)
+        cancellable_lines = []
+        for line in orders_result.split("\n"):
+            if "PENDING" in line or "CONFIRMED" in line:
+                cancellable_lines.append(line.strip())
+        
+        trace_steps.append({
+            "thought": "Khách hàng muốn hủy đơn nhưng KHÔNG chỉ định mã đơn hàng cụ thể. Yêu cầu xác nhận mã đơn trước khi hủy.",
+            "action": f"get_user_orders[{user_id}, 'ALL'] → lọc đơn có thể hủy",
+            "observation": f"Tìm thấy {len(cancellable_lines)} đơn có thể hủy"
+        })
+        
+        if cancellable_lines:
+            orders_list = "<br>".join([f"&nbsp;&nbsp;{line}" for line in cancellable_lines])
+            final_res = (
+                f"⚠️ Bạn muốn hủy đơn hàng nhưng chưa cho tôi biết <strong>mã đơn hàng cụ thể</strong>.<br><br>"
+                f"📋 <strong>Các đơn hàng có thể hủy của bạn:</strong><br>{orders_list}<br><br>"
+                f"💡 Vui lòng nhập chính xác, ví dụ: <em>'Hủy đơn hàng ORD-XXXX'</em>"
+            )
+        else:
+            final_res = (
+                "📭 Hiện tại bạn không có đơn hàng nào ở trạng thái có thể hủy (PENDING hoặc CONFIRMED).<br>"
+                "Chỉ đơn hàng chưa được đóng gói mới có thể hủy."
+            )
 
     elif "đổi trả" in query_lower and code:
         eligibility = check_return_eligibility(code)
@@ -389,7 +424,7 @@ def api_chat():
         })
         final_res = f"📦 Thông tin đơn hàng <strong>{code}</strong>:<br><pre style='font-family:sans-serif;'>{details}\n\n{shipping}</pre>"
         
-    elif any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "bao nhiêu đơn", "xem đơn hàng", "đơn hàng hiện có", "tất cả đơn hàng", "my orders", "lịch sử đơn hàng", "lịch sử mua hàng", "đã đặt bao nhiêu", "tôi đã mua"]):
+    elif any(kw in query_lower for kw in ["đơn hàng của tôi", "danh sách đơn", "các đơn hàng", "bao nhiêu đơn", "xem đơn hàng", "đơn hàng hiện có", "tất cả đơn hàng", "my orders", "lịch sử đơn hàng", "lịch sử mua hàng", "đã đặt bao nhiêu", "tôi đã mua", "số đơn hiện tại", "số đơn", "mấy đơn", "don hang cua toi", "xem don hang", "co bao nhieu don"]):
         orders_result = get_user_orders(user_id=user_id, status_filter="ALL")
         trace_steps.append({
             "thought": f"Khách hàng yêu cầu xem danh sách tất cả đơn hàng. Gọi tool get_user_orders[{user_id}].",
