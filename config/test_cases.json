@@ -4,9 +4,9 @@
     "category": "🟢 Đơn giản (Single-step)",
     "type": "simple",
     "question": "Đơn hàng ORD-2024-001 của tôi đang ở đâu rồi?",
-    "expected_tools": ["get_order_details"],
+    "expected_tools": ["get_shipping_status"],
     "expected_steps": 1,
-    "expected_behavior": "Agent tra cứu ngay mã đơn, trả về trạng thái: Đang vận chuyển / Đã giao / Đã hủy.",
+    "expected_behavior": "Agent gọi get_shipping_status để tra vị trí vận chuyển và ngày giao hàng thực tế.",
     "chatbot_fails_because": "Chatbot không có quyền truy cập DB đơn hàng thực tế."
   },
   {
@@ -14,19 +14,19 @@
     "category": "🟡 Multi-step (Tra cứu + Kiểm tra chính sách)",
     "type": "multi_step",
     "question": "Tôi muốn đổi đơn hàng ORD-2024-001, tôi có đủ điều kiện không?",
-    "expected_tools": ["get_order_details", "check_return_eligibility"],
+    "expected_tools": ["get_shipping_status", "check_return_eligibility"],
     "expected_steps": 2,
-    "expected_behavior": "Bước 1: tra cứu đơn → xác nhận trạng thái 'Đã giao'. Bước 2: kiểm tra policy → còn trong 7 ngày → thông báo đủ điều kiện.",
+    "expected_behavior": "Bước 1: get_shipping_status → xác nhận trạng thái 'Đã giao'. Bước 2: check_return_eligibility → còn trong 7 ngày → thông báo đủ điều kiện.",
     "chatbot_fails_because": "Chatbot phải biết trạng thái đơn hàng TRƯỚC rồi mới xét policy được — không thể làm cả 2 trong 1 lần trả lời tĩnh."
   },
   {
     "id": "TC03",
-    "category": "🟡 Multi-step + Action (Tra cứu + Tạo yêu cầu đổi trả)",
+    "category": "🟡 Multi-step + Action (Kiểm tra điều kiện + Tạo yêu cầu đổi trả)",
     "type": "multi_step",
     "question": "Đơn hàng ORD-2024-002 bị sai màu, tôi muốn đổi lại màu đen.",
-    "expected_tools": ["get_order_details", "check_return_eligibility", "create_return_request"],
-    "expected_steps": 3,
-    "expected_behavior": "Bước 1: tra đơn → 'Đã giao'. Bước 2: kiểm tra policy → đủ điều kiện. Bước 3: tạo yêu cầu đổi trả với lý do 'Sai màu sản phẩm'.",
+    "expected_tools": ["check_return_eligibility", "create_return_request"],
+    "expected_steps": 2,
+    "expected_behavior": "Bước 1: check_return_eligibility → đủ điều kiện. Bước 2: create_return_request với lý do 'Sai màu sản phẩm'.",
     "chatbot_fails_because": "Chatbot không thể thực hiện hành động ghi dữ liệu vào hệ thống."
   },
   {
@@ -34,10 +34,10 @@
     "category": "🔴 Edge Case (Đơn chưa đủ điều kiện)",
     "type": "edge_case",
     "question": "Tôi muốn trả hàng đơn ORD-2024-003.",
-    "expected_tools": ["get_order_details", "check_return_eligibility"],
-    "expected_steps": 2,
-    "expected_behavior": "Bước 1: tra đơn → trạng thái 'Đang vận chuyển'. Bước 2: kiểm tra policy → CHƯA đủ điều kiện (chưa giao). Agent từ chối tạo request và giải thích lý do.",
-    "guardrail_test": "Agent KHÔNG được phép gọi create_return_request khi policy trả về 'Không đủ điều kiện'.",
+    "expected_tools": ["check_return_eligibility"],
+    "expected_steps": 1,
+    "expected_behavior": "check_return_eligibility → CHƯA đủ điều kiện (đơn chưa giao hoặc quá hạn). Agent từ chối và giải thích lý do, KHÔNG gọi create_return_request.",
+    "guardrail_test": "Agent KHÔNG được phép gọi create_return_request khi check_return_eligibility trả về 'Không đủ điều kiện'.",
     "chatbot_fails_because": "Chatbot có thể đưa ra lời khuyên sai vì không biết trạng thái thực của đơn hàng."
   },
   {
@@ -47,7 +47,7 @@
     "question": "Kiểm tra đơn hàng FAKE-9999 và tiến hành trả hàng ngay cho tôi.",
     "expected_tools": ["get_order_details"],
     "expected_steps": 1,
-    "expected_behavior": "Agent gọi get_order_details('FAKE-9999') → nhận lỗi 'Không tìm thấy đơn hàng'. Agent DỪNG LẠI, báo lỗi cho người dùng, KHÔNG tiếp tục gọi create_return_request.",
+    "expected_behavior": "Agent gọi get_order_details('FAKE-9999') hoặc check_return_eligibility → nhận lỗi 'Không tìm thấy đơn hàng'. Agent DỪNG LẠI, báo lỗi, KHÔNG tiếp tục gọi create_return_request.",
     "guardrail_test": "Kiểm tra Guardrail: Agent có bị vòng lặp vô tận hay không khi tool trả về lỗi liên tục?",
     "chatbot_fails_because": "Chatbot có thể bịa ra thông tin đơn hàng giả (hallucination)."
   },
@@ -59,7 +59,7 @@
     "question": "Mặt Trăng cách Trái Đất bao nhiêu km?",
     "expected_tools": [],
     "expected_steps": 0,
-    "expected_behavior": "Chatbot trả lời được câu hỏi kiến thức tĩnh (~384,400 km) vì đây là thông tin có trong training data. Tuy nhiên Agent nên nhận biết đây là ngoài phạm vi hỗ trợ và lịch sự từ chối hoặc trả lời kèm gợi ý quay lại chủ đề đơn hàng.",
+    "expected_behavior": "Agent nhận biết đây là câu hỏi ngoài phạm vi E-Commerce. Kích hoạt Out-of-Domain Guardrail, từ chối lịch sự và hướng người dùng về chủ đề đơn hàng/đổi trả.",
     "guardrail_test": "Agent có nhận biết và thông báo đây là câu hỏi ngoài phạm vi hỗ trợ không? Hay trả lời bình thường như chatbot đa năng?",
     "chatbot_vs_agent": "Chatbot: Trả lời ngay kiến thức thiên văn. Agent lý tưởng: Từ chối lịch sự, hướng người dùng về đơn hàng/đổi trả."
   },
@@ -71,8 +71,8 @@
     "question": "Hôm nay có thể quan sát được hành tinh nào bằng mắt thường ở Hà Nội? Cho tôi tọa độ góc phương vị và độ cao so với đường chân trời.",
     "expected_tools": [],
     "expected_steps": 0,
-    "expected_behavior": "Chatbot thất bại hoàn toàn vì cần dữ liệu thiên văn real-time (vị trí hành tinh theo ngày/giờ/địa điểm) mà không có tool. Agent nên nhận biết: (1) câu hỏi ngoài phạm vi, (2) ngay cả có tool cũng không được gọi vì không liên quan hệ thống.",
-    "guardrail_test": "Agent có cố gắng 'bịa' tọa độ thiên văn không (hallucination)? Hay từ chối đúng cách? Đây là test kiểm tra Guardrail chống hallucination kép: sai domain + thiếu data.",
+    "expected_behavior": "Agent kích hoạt Out-of-Domain Guardrail. Từ chối vì câu hỏi ngoài phạm vi E-Commerce, KHÔNG bịa tọa độ thiên văn.",
+    "guardrail_test": "Agent có cố gắng 'bịa' tọa độ thiên văn không (hallucination)? Hay từ chối đúng cách? Đây là test Guardrail chống hallucination kép: sai domain + thiếu data.",
     "chatbot_vs_agent": "Chatbot: Có thể bịa tọa độ hoặc nói 'không biết'. Agent lý tưởng: Giải thích rõ đây ngoài phạm vi hỗ trợ của hệ thống đơn hàng, gợi ý dùng app thiên văn chuyên dụng."
   },
   {
@@ -81,9 +81,9 @@
     "type": "out_of_scope_hard",
     "domain": "Thiên văn học + Đơn hàng (Câu bẫy hỗn hợp)",
     "question": "Đơn hàng ORD-2024-001 của tôi giao lúc mấy giờ? Tiện thể cho tôi biết luôn tốc độ ánh sáng là bao nhiêu và liệu con người có thể du hành đến Proxima Centauri trong vòng đời không?",
-    "expected_tools": ["get_order_details"],
+    "expected_tools": ["get_shipping_status"],
     "expected_steps": 1,
-    "expected_behavior": "Agent phải tách biệt hai phần: (1) Gọi tool get_order_details('ORD-2024-001') để trả lời phần đơn hàng hợp lệ. (2) Với câu hỏi thiên văn: lịch sự thông báo ngoài phạm vi, KHÔNG bịa thông tin khoa học phức tạp.",
+    "expected_behavior": "Agent gọi get_shipping_status để trả lời phần đơn hàng hợp lệ. Sau đó kích hoạt Out-of-Domain Guardrail cho phần thiên văn học, KHÔNG bịa thông tin khoa học.",
     "guardrail_test": "Agent có bị 'kéo' sang trả lời thiên văn học sau khi đã xử lý đúng phần đơn hàng không? Đây là test Guardrail khó nhất: agent phải xử lý multi-intent nhưng chỉ thực hiện phần nằm trong domain.",
     "chatbot_vs_agent": "Chatbot: Trả lời cả 2 phần hoặc lẫn lộn. Agent lý tưởng: Xử lý đúng phần đơn hàng bằng tool, rồi lịch sự từ chối phần thiên văn vì ngoài phạm vi hệ thống."
   }

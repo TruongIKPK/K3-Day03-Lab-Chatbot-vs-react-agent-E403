@@ -5,3 +5,28 @@ __pycache__/
 .venv/
 env/
 venv/
+
+# SQLite / Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# IDE / Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs & Temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
