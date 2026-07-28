@@ -158,6 +158,85 @@ def init_db():
     conn.commit()
     conn.close()
 
+# --- CHAT SESSION & MEMORY MANAGEMENT (LƯU NGỮ CẢNH HỘI THOẠI) ---
+
+def get_or_create_session(user_id: int, session_id: int = None) -> int:
+    """Tạo mới hoặc lấy session_id hội thoại đang hoạt động của user_id."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if session_id:
+        cursor.execute("SELECT id FROM chat_sessions WHERE id = ?;", (int(session_id),))
+        row = cursor.fetchone()
+        if row:
+            conn.close()
+            return int(session_id)
+            
+    # Lấy phiên thoại mới nhất của user_id nếu chưa truyền session_id
+    cursor.execute("SELECT id FROM chat_sessions WHERE user_id = ? ORDER BY id DESC LIMIT 1;", (int(user_id),))
+    row = cursor.fetchone()
+    if row:
+        sid = row["id"]
+        conn.close()
+        return sid
+        
+    # Tạo phiên thoại mới nếu chưa có
+    cursor.execute("INSERT INTO chat_sessions (user_id) VALUES (?);", (int(user_id),))
+    sid = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return sid
+
+
+def save_chat_message(session_id: int, role: str, message: str) -> None:
+    """Lưu tin nhắn (USER / ASSISTANT) vào bảng chat_messages SQLite."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO chat_messages (session_id, role, message)
+            VALUES (?, ?, ?);
+        """, (int(session_id), role.upper(), message))
+        
+        # Cập nhật thời gian updated_at cho phiên thoại
+        cursor.execute("UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?;", (int(session_id),))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Lỗi lưu chat message: {e}")
+
+
+def get_chat_history(session_id: int, limit: int = 6) -> list:
+    """Lấy danh sách tin nhắn gần đây trong phiên thoại để tái tạo ngữ cảnh."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT role, message, created_at
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY id DESC
+            LIMIT ?;
+        """, (int(session_id), int(limit)))
+        rows = cursor.fetchall()
+        conn.close()
+        # Đảo ngược lại theo thứ tự thời gian từ cũ -> mới
+        return [dict(r) for r in reversed(rows)]
+    except Exception:
+        return []
+
+
+def extract_order_code_from_history(session_id: int) -> str:
+    """Truy tìm mã đơn hàng (ORD-xxxx) gần nhất trong lịch sử hội thoại của phiên thoại."""
+    import re
+    history = get_chat_history(session_id, limit=10)
+    for msg in reversed(history):
+        match = re.search(r"ORD-\d+", msg.get("message", "").upper())
+        if match:
+            return match.group(0)
+    return None
+
+
 if __name__ == "__main__":
     init_db()
     print("✅ Đã khởi tạo và cập nhật cơ sở dữ liệu SQLite thành công!")
