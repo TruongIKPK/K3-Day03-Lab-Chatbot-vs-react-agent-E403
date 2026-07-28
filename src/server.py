@@ -477,7 +477,12 @@ def api_chat():
         # Lấy lịch sử hội thoại 6 tin gần đây để làm Context cho LLM
         history_msgs = get_chat_history(session_id, limit=6)
         history_text = "\n".join([f"{m['role']}: {m['message']}" for m in history_msgs])
-        context_prompt = f"Lịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}" if history_text else user_query
+        
+        user_context_info = f"THÔNG TIN TÀI KHOẢN ĐANG ĐĂNG NHẬP: user_id = {user_id}, role = {user_role}."
+        if history_text:
+            context_prompt = f"{user_context_info}\nLịch sử hội thoại gần đây trong phiên:\n{history_text}\n\nCâu hỏi mới: {user_query}"
+        else:
+            context_prompt = f"{user_context_info}\n\nCâu hỏi mới: {user_query}"
 
         llm_out = provider.generate(context_prompt, system_prompt=REACT_SYSTEM_PROMPT)
         
